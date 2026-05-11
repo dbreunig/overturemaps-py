@@ -45,6 +45,27 @@ def _emit_error_json(message, code="error"):
     click.echo(orjson.dumps(err).decode(), err=True)
 
 
+def _limit_reader(reader, n):
+    """Yield a new RecordBatchReader emitting at most `n` rows."""
+    import pyarrow as pa
+
+    def _batches():
+        remaining = n
+        while remaining > 0:
+            try:
+                batch = reader.read_next_batch()
+            except StopIteration:
+                return
+            if batch.num_rows == 0:
+                continue
+            if batch.num_rows > remaining:
+                batch = batch.slice(0, remaining)
+            remaining -= batch.num_rows
+            yield batch
+
+    return pa.RecordBatchReader.from_batches(reader.schema, _batches())
+
+
 # Earth's total surface area in square degrees (360 * 180).
 EARTH_AREA_SQ_DEG = 64800
 # Threshold (fraction of Earth) above which we warn about a large bbox.
@@ -442,6 +463,55 @@ def count(ctx, type_, bbox, in_place, where_exprs, release):
         })
     else:
         click.echo(f"{n:,}")
+
+
+@cli.command()
+@click.option("-t", "--type", "type_",
+              type=click.Choice(get_all_overture_types()), required=True)
+@click.option("--bbox", required=False, type=BboxParamType())
+@click.option("--in", "in_place", required=False, type=str)
+@click.option("--where", "where_exprs", multiple=True)
+@click.option("-n", default=10, show_default=True, type=int,
+              help="Maximum number of features to emit.")
+@click.option("-f", "output_format",
+              type=click.Choice(["geojson", "geojsonseq", "geoparquet"]),
+              default="geojsonseq", show_default=True)
+@click.option("-o", "--output", required=False, type=click.Path())
+@click.option("-r", "--release", default=None, callback=validate_release,
+              required=False)
+def sample(type_, bbox, in_place, where_exprs, n, output_format, output, release):
+    """Emit the first N features matching the query."""
+    if bbox is not None and in_place is not None:
+        raise click.UsageError("--bbox and --in are mutually exclusive")
+    if in_place is not None:
+        try:
+            division = best_match(in_place)
+        except LookupError as e:
+            raise click.UsageError(str(e))
+        bbox = list(division.bbox)
+
+    try:
+        where_filters = (
+            [parse_where_expr(e) for e in where_exprs] if where_exprs else None
+        )
+    except ValueError as e:
+        raise click.UsageError(str(e))
+
+    reader = record_batch_reader(
+        type_, bbox, release, None, None, True,
+        where_filters=where_filters,
+    )
+    if reader is None:
+        return
+
+    if output_format == "geoparquet" and output is None:
+        raise click.UsageError("Output file (-o/--output) is required for geoparquet")
+
+    output_file = sys.stdout if output is None else output
+    limited = _limit_reader(reader, n)
+
+    with get_writer(output_format, output_file, schema=limited.schema) as writer:
+        copy(limited, writer)
 
 
 @cli.group()
