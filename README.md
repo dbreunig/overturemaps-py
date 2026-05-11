@@ -20,6 +20,31 @@ Download the building footprints for the specific bounding box as GeoJSON and sa
 overturemaps download --bbox=-71.068,42.353,-71.058,42.363 -f geojson --type=building -o boston.geojson
 ```
 
+## Quick Start for Coding Agents
+
+Install the Skill so an agent can discover this CLI automatically:
+
+```bash
+overturemaps install-skill
+```
+
+Self-introspect:
+
+```bash
+overturemaps --json capabilities    # list every subcommand + parameters
+overturemaps --json themes          # list themes
+overturemaps --json types           # list types
+overturemaps --json schema -t place # fields + a sample feature
+```
+
+Resolve a place, count, then download:
+
+```bash
+overturemaps --json where "Boston, MA"
+overturemaps --json count -t place --in "Boston, MA" --where categories.primary=restaurant
+overturemaps places --in "Boston, MA" --category restaurant -f geojsonseq -o out.jsonl
+```
+
 ## Usage
 
 #### `download`
@@ -49,6 +74,42 @@ necessary to extract data from the desired region.
 To help find bounding boxes of interest, we like this [bounding box tool](https://boundingbox.klokantech.com/)
 from [Klokantech](https://www.klokantech.com/). Choose the CSV format and copy the value directly into
 the `--bbox` field here.
+
+#### `where TEXT`
+
+Resolve a place name to a division feature. Returns bbox, subtype, population, hierarchy.
+
+#### `count`, `sample`
+
+Cheap previews of any query (`-t TYPE --in PLACE --where FILTER`).
+
+#### `themes`, `types`, `schema`, `categories`, `capabilities`
+
+Introspect what's queryable. `--json` produces machine-readable output.
+
+#### `places`, `buildings`, `roads`
+
+Intent verbs that wrap `download` with a familiar shape:
+
+```bash
+overturemaps places --in "Brooklyn" --category hospital -f geojsonseq -o out.jsonl
+overturemaps buildings --in "Manhattan" --where height>100 -f geojsonseq -o out.jsonl
+overturemaps roads --in "Texas, US" --class motorway -f geojsonseq -o out.jsonl
+```
+
+#### `at LAT,LON`, `containing LAT,LON`
+
+Point queries. `at` is nearest-neighbor; `containing` lists admin divisions
+that contain the point.
+
+#### `install-skill`
+
+Install the agent-discoverable Skill for Claude Code and/or write an
+`AGENTS.md` section.
+
+#### `cache info|clear|build`
+
+Manage the on-disk divisions index (used by `--in` and `containing`).
 
 #### `gers [UUID]`
 
