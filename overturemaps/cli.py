@@ -13,6 +13,7 @@ import uuid
 from datetime import datetime, timezone
 
 import click
+import orjson
 
 from .changelog import query_changelog_ids, summarize_changelog
 from .core import (
@@ -28,7 +29,19 @@ from .releases import list_releases, release_exists
 from .state import get_state_path, load_state, save_state
 from .writers import copy, get_writer
 from .filters import parse_where_expr
-from .geocoding import best_match
+from .geocoding import best_match, resolve
+
+
+def _emit_json(ctx, payload, file=None):
+    """Print one JSON document to stdout."""
+    out = orjson.dumps(payload, option=orjson.OPT_INDENT_2).decode()
+    click.echo(out, file=file)
+
+
+def _emit_error_json(message, code="error"):
+    """Print a JSON error envelope to stderr."""
+    err = {"error": {"code": code, "message": message}}
+    click.echo(orjson.dumps(err).decode(), err=True)
 
 
 # Earth's total surface area in square degrees (360 * 180).
@@ -352,6 +365,39 @@ def gers(ctx, gers_id, output_format, output, connect_timeout, request_timeout):
 
     with get_writer(output_format, output, schema=reader.schema) as writer:
         copy(reader, writer)
+
+
+@cli.command()
+@click.argument("query", type=str)
+@click.pass_context
+def where(ctx, query):
+    """Resolve a place name to an Overture division feature."""
+    json_mode = ctx.obj.get("json", False)
+    try:
+        pick = best_match(query)
+    except LookupError as e:
+        if json_mode:
+            _emit_error_json(str(e), code="no_match")
+        else:
+            click.secho(str(e), fg="red", err=True)
+        ctx.exit(1)
+
+    if json_mode:
+        all_matches = resolve(query)
+        payload = pick.as_dict()
+        payload["candidates"] = [d.as_dict() for d in all_matches]
+        _emit_json(ctx, payload)
+        return
+
+    # Human output
+    region_or_country = pick.region or pick.country or "?"
+    click.secho(f"{pick.name}, {region_or_country}", bold=True)
+    click.echo(f"  subtype: {pick.subtype}")
+    click.echo(f"  bbox: {pick.bbox[0]:.4f}, {pick.bbox[1]:.4f}, "
+               f"{pick.bbox[2]:.4f}, {pick.bbox[3]:.4f}")
+    if pick.population is not None:
+        click.echo(f"  population: {pick.population:,}")
+    click.echo(f"  id: {pick.id}")
 
 
 @cli.group()
