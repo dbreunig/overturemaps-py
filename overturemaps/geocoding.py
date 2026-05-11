@@ -75,11 +75,15 @@ def resolve(query: str) -> List[Division]:
 
     filtered = table.filter(name_match)
 
-    # Apply qualifiers: each must match country code (2 chars) or region code
+    # Apply qualifiers: each must match country code (2 chars), full region
+    # code (e.g. "US-MA"), or the suffix after the hyphen (e.g. "MA" -> "US-MA").
     for q in qualifiers:
         country_match = pc.equal(filtered.column("country"), q)
         region_match = pc.equal(filtered.column("region"), q)
-        filtered = filtered.filter(pc.or_(country_match, region_match))
+        region_suffix_match = pc.ends_with(filtered.column("region"), f"-{q}")
+        filtered = filtered.filter(
+            pc.or_(pc.or_(country_match, region_match), region_suffix_match)
+        )
 
     if filtered.num_rows == 0:
         return []

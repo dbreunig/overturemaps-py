@@ -498,14 +498,14 @@ def count(ctx, type_, bbox, in_place, where_exprs, release):
         raise click.UsageError(str(e))
 
     n = count_rows(
-        type_, bbox=bbox, release=release, where_filters=where_filters,
+        type_, bbox=bbox, release=release, stac=True, where_filters=where_filters,
     )
 
     if ctx.obj.get("json"):
         _emit_json(ctx, {
             "type": type_,
             "bbox": bbox,
-            "where": [f"{f.key}{f.op}{f.value}" for f in (where_filters or [])],
+            "where": [{"key": f.key, "op": f.op, "value": f.value} for f in (where_filters or [])],
             "release": release,
             "count": n,
         })

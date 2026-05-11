@@ -97,3 +97,17 @@ def test_best_match_no_match_raises(fake_index):
 def test_division_bbox_property(fake_index):
     pick = best_match("Massachusetts")
     assert pick.bbox == (-73.5, 41.2, -69.9, 42.9)
+
+
+def test_resolve_region_suffix_qualifier(fake_index):
+    """'Boston, MA' should match the US-MA region (the primary documented form)."""
+    results = resolve("Boston, MA")
+    assert len(results) == 1
+    assert results[0].region == "US-MA"
+
+
+def test_best_match_short_region_qualifier(fake_index):
+    """'Boston, MA' produces the same pick as 'Boston, US-MA'."""
+    pick_short = best_match("Boston, MA")
+    pick_full = best_match("Boston, US-MA")
+    assert pick_short.id == pick_full.id
