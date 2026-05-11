@@ -16,6 +16,7 @@ import click
 import orjson
 
 from .changelog import query_changelog_ids, summarize_changelog
+from .introspection import list_themes, list_types
 from .core import (
     count_rows,
     get_all_overture_types,
@@ -512,6 +513,41 @@ def sample(type_, bbox, in_place, where_exprs, n, output_format, output, release
 
     with get_writer(output_format, output_file, schema=limited.schema) as writer:
         copy(limited, writer)
+
+
+@cli.command()
+@click.pass_context
+def themes(ctx):
+    """List the six Overture themes."""
+    data = list_themes()
+    if ctx.obj.get("json"):
+        _emit_json(ctx, data)
+        return
+    for t in data:
+        click.secho(t["name"], bold=True, fg="cyan")
+        click.echo(f"  {t['description']}")
+        click.echo(f"  types: {', '.join(t['types'])}")
+        click.echo()
+
+
+@cli.command()
+@click.option("--theme", required=False, type=str,
+              help="Filter to types belonging to this theme.")
+@click.pass_context
+def types(ctx, theme):
+    """List Overture feature types."""
+    try:
+        data = list_types(theme=theme)
+    except ValueError as e:
+        raise click.UsageError(str(e))
+    if ctx.obj.get("json"):
+        _emit_json(ctx, data)
+        return
+    for t in data:
+        click.secho(t["name"], bold=True, fg="cyan")
+        click.echo(f"  theme: {t['theme']}")
+        click.echo(f"  {t['description']}")
+        click.echo()
 
 
 @cli.group()
