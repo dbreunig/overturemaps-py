@@ -67,6 +67,48 @@ def _limit_reader(reader, n):
     return pa.RecordBatchReader.from_batches(reader.schema, _batches())
 
 
+def _describe_param(param: click.Parameter) -> dict:
+    """Convert a Click parameter to a JSON-friendly description."""
+    out: dict = {
+        "name": param.name,
+        "required": getattr(param, "required", False),
+    }
+    if isinstance(param, click.Option):
+        out["flags"] = list(param.opts)
+        out["help"] = param.help or ""
+        out["multiple"] = param.multiple
+        out["is_flag"] = param.is_flag
+    if param.default is not None and param.default is not False:
+        try:
+            # Only include defaults that are JSON-serializable
+            if isinstance(param.default, (str, int, float, bool, list, tuple, type(None))):
+                out["default"] = param.default
+        except Exception:
+            pass
+    if isinstance(param.type, click.Choice):
+        out["choices"] = list(param.type.choices)
+    return out
+
+
+def _describe_command(name: str, command: click.Command) -> dict:
+    return {
+        "name": name,
+        "help": command.help or command.short_help or "",
+        "params": [_describe_param(p) for p in command.params],
+    }
+
+
+def _walk_group(group: click.Group, prefix: str = "") -> list[dict]:
+    out: list[dict] = []
+    for name, cmd in group.commands.items():
+        full = f"{prefix}{name}" if not prefix else f"{prefix} {name}"
+        if isinstance(cmd, click.Group):
+            out.extend(_walk_group(cmd, prefix=full))
+        else:
+            out.append(_describe_command(full, cmd))
+    return out
+
+
 # Earth's total surface area in square degrees (360 * 180).
 EARTH_AREA_SQ_DEG = 64800
 # Threshold (fraction of Earth) above which we warn about a large bbox.
@@ -653,6 +695,24 @@ def categories(ctx, type_, bbox, in_place, top, release):
         return
     for row in payload:
         click.echo(f"  {row['count']:>8,}  {row['value']}")
+
+
+@cli.command()
+@click.pass_context
+def capabilities(ctx):
+    """Emit a machine-readable manifest of all subcommands."""
+    payload = {
+        "version": importlib.metadata.version("overturemaps"),
+        "commands": _walk_group(cli),
+    }
+    if ctx.obj.get("json"):
+        _emit_json(ctx, payload)
+        return
+    # Human mode just prints command names.
+    for c in payload["commands"]:
+        click.secho(c["name"], bold=True)
+        if c["help"]:
+            click.echo(f"  {c['help']}")
 
 
 @cli.group()
