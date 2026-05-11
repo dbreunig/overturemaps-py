@@ -597,6 +597,64 @@ def schema(ctx, type_, release):
         click.echo(orjson.dumps(sample, option=orjson.OPT_INDENT_2).decode())
 
 
+@cli.command()
+@click.option("-t", "--type", "type_",
+              type=click.Choice(["place"]), default="place", show_default=True,
+              help="Currently only `place` is supported.")
+@click.option("--bbox", required=False, type=BboxParamType())
+@click.option("--in", "in_place", required=False, type=str)
+@click.option("--top", default=20, show_default=True, type=int)
+@click.option("-r", "--release", default=None, callback=validate_release,
+              required=False)
+@click.pass_context
+def categories(ctx, type_, bbox, in_place, top, release):
+    """Enumerate `categories.primary` values, sorted by count desc."""
+    if bbox is not None and in_place is not None:
+        raise click.UsageError("--bbox and --in are mutually exclusive")
+    if in_place is not None:
+        try:
+            division = best_match(in_place)
+        except LookupError as e:
+            raise click.UsageError(str(e))
+        bbox = list(division.bbox)
+
+    if bbox is None:
+        raise click.UsageError("Provide --bbox or --in; global enumeration is too costly.")
+
+    reader = record_batch_reader(type_, bbox, release, None, None, True)
+    if reader is None:
+        if ctx.obj.get("json"):
+            _emit_json(ctx, [])
+        return
+
+    import pyarrow.compute as pc
+
+    counts: dict[str, int] = {}
+    while True:
+        try:
+            batch = reader.read_next_batch()
+        except StopIteration:
+            break
+        if batch.num_rows == 0:
+            continue
+        cat_col = batch.column("categories")
+        primary = pc.struct_field(cat_col, "primary")
+        for item in pc.value_counts(primary).to_pylist():
+            val = item["values"]
+            if val is None:
+                continue
+            counts[val] = counts.get(val, 0) + item["counts"]
+
+    ranked = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:top]
+    payload = [{"value": v, "count": c} for v, c in ranked]
+
+    if ctx.obj.get("json"):
+        _emit_json(ctx, payload)
+        return
+    for row in payload:
+        click.echo(f"  {row['count']:>8,}  {row['value']}")
+
+
 @cli.group()
 def releases():
     """Manage and query Overture Maps releases."""
