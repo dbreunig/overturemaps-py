@@ -5,9 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, List, Union
 
-import pyarrow as pa
-import pyarrow.compute as pc
-
 
 # Operators ordered longest-first so the splitter doesn't mistake `>=` for `>`.
 _OPERATORS = ["<=", ">=", "!=", " in ", "=", "<", ">"]

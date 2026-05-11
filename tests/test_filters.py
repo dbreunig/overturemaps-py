@@ -1,7 +1,5 @@
 """Tests for the --where filter parser."""
 
-import pyarrow as pa
-import pyarrow.compute as pc
 import pytest
 
 from overturemaps.filters import parse_where_expr, ParsedFilter
