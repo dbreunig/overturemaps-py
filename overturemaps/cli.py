@@ -17,6 +17,7 @@ import orjson
 
 from .changelog import query_changelog_ids, summarize_changelog
 from .core import (
+    count_rows,
     get_all_overture_types,
     get_available_releases,
     get_latest_release,
@@ -398,6 +399,49 @@ def where(ctx, query):
     if pick.population is not None:
         click.echo(f"  population: {pick.population:,}")
     click.echo(f"  id: {pick.id}")
+
+
+@cli.command()
+@click.option("-t", "--type", "type_",
+              type=click.Choice(get_all_overture_types()), required=True)
+@click.option("--bbox", required=False, type=BboxParamType())
+@click.option("--in", "in_place", required=False, type=str)
+@click.option("--where", "where_exprs", multiple=True)
+@click.option("-r", "--release", default=None, callback=validate_release,
+              required=False)
+@click.pass_context
+def count(ctx, type_, bbox, in_place, where_exprs, release):
+    """Count features for a query without downloading them."""
+    if bbox is not None and in_place is not None:
+        raise click.UsageError("--bbox and --in are mutually exclusive")
+    if in_place is not None:
+        try:
+            division = best_match(in_place)
+        except LookupError as e:
+            raise click.UsageError(str(e))
+        bbox = list(division.bbox)
+
+    try:
+        where_filters = (
+            [parse_where_expr(e) for e in where_exprs] if where_exprs else None
+        )
+    except ValueError as e:
+        raise click.UsageError(str(e))
+
+    n = count_rows(
+        type_, bbox=bbox, release=release, where_filters=where_filters,
+    )
+
+    if ctx.obj.get("json"):
+        _emit_json(ctx, {
+            "type": type_,
+            "bbox": bbox,
+            "where": [f"{f.key}{f.op}{f.value}" for f in (where_filters or [])],
+            "release": release,
+            "count": n,
+        })
+    else:
+        click.echo(f"{n:,}")
 
 
 @cli.group()
