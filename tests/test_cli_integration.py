@@ -68,6 +68,6 @@ def test_containing_known_point():
     subtypes = [d["subtype"] for d in data]
     assert "country" in subtypes
     assert "region" in subtypes or "locality" in subtypes
-    # Innermost-first ordering
-    levels = [d["admin_level"] for d in data]
+    # Innermost-first ordering; admin_level may be None for neighborhoods
+    levels = [d["admin_level"] or 0 for d in data]
     assert levels == sorted(levels, reverse=True)
