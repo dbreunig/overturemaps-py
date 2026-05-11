@@ -137,8 +137,12 @@ def validate_gers_id(ctx, param, value):
     version=importlib.metadata.version("overturemaps"),
     prog_name="overturemaps",
 )
+@click.option("--json", "json_output", is_flag=True, default=False,
+              help="Emit machine-readable JSON for metadata commands.")
 @click.pass_context
-def cli(ctx):
+def cli(ctx, json_output):
+    ctx.ensure_object(dict)
+    ctx.obj["json"] = json_output
     if ctx.invoked_subcommand is None:
         _print_banner()
         click.echo(ctx.get_help())
