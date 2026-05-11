@@ -32,6 +32,7 @@ from .state import get_state_path, load_state, save_state
 from .writers import copy, get_writer
 from .filters import parse_where_expr
 from .geocoding import best_match, resolve
+from .cache import cache_info, clear_cache, build_index, index_path
 
 
 def _emit_json(ctx, payload, file=None):
@@ -713,6 +714,45 @@ def capabilities(ctx):
         click.secho(c["name"], bold=True)
         if c["help"]:
             click.echo(f"  {c['help']}")
+
+
+@cli.group()
+def cache():
+    """Manage the on-disk divisions index."""
+    pass
+
+
+@cache.command("info")
+@click.pass_context
+def cache_info_cmd(ctx):
+    """Show cache location, current release, and up-to-date status."""
+    latest = get_latest_release()
+    data = cache_info(latest_release=latest)
+    if ctx.obj.get("json"):
+        _emit_json(ctx, data)
+        return
+    click.echo(f"Cache path:      {data['index_path']}")
+    click.echo(f"Cached release:  {data['index_release'] or '(none)'}")
+    click.echo(f"Latest release:  {data['latest_release']}")
+    click.echo(f"Up to date:      {data['up_to_date']}")
+    click.echo(f"Size:            {data['size_bytes']:,} bytes")
+
+
+@cache.command("clear")
+def cache_clear_cmd():
+    """Remove all divisions-index files from the cache."""
+    n = clear_cache()
+    click.echo(f"Removed {n} cache file(s).")
+
+
+@cache.command("build")
+def cache_build_cmd():
+    """Force a rebuild of the divisions index against the latest release."""
+    release = get_latest_release()
+    click.secho(f"Building divisions index for release {release}...",
+                fg="bright_black", err=True)
+    p = build_index(release)
+    click.secho(f"Wrote {p}", fg="green", err=True)
 
 
 @cli.group()
