@@ -1,0 +1,42 @@
+"""Tests for the `install-skill` CLI command."""
+
+from pathlib import Path
+
+import pytest
+from click.testing import CliRunner
+
+from overturemaps.cli import cli
+
+
+def test_install_skill_non_interactive_claude_user(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, [
+            "install-skill", "--target", "claude-user", "--yes",
+        ])
+        assert result.exit_code == 0, result.output
+        expected = tmp_path / ".claude" / "skills" / "overturemaps" / "SKILL.md"
+        assert expected.exists()
+
+
+def test_install_skill_multiple_targets(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, [
+            "install-skill",
+            "--target", "claude-user",
+            "--target", "agents-md",
+            "--yes",
+        ])
+        assert result.exit_code == 0, result.output
+        assert (tmp_path / ".claude" / "skills" / "overturemaps" / "SKILL.md").exists()
+
+
+def test_install_skill_rejects_unknown_target():
+    runner = CliRunner()
+    result = runner.invoke(cli, [
+        "install-skill", "--target", "not-a-target", "--yes",
+    ])
+    assert result.exit_code != 0

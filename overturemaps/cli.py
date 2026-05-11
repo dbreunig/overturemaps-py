@@ -36,6 +36,7 @@ from .writers import copy, get_writer
 from .filters import parse_where_expr, ParsedFilter
 from .geocoding import best_match, resolve
 from .cache import cache_info, clear_cache, build_index, index_path
+from . import skill_installer
 
 
 def _emit_json(ctx, payload, file=None):
@@ -1057,6 +1058,48 @@ def containing(ctx, latlon):
     for row in payload:
         loc = row["region"] or row["country"] or "?"
         click.secho(f"  {row['name']} ({row['subtype']}, {loc})", fg="cyan")
+
+
+_INSTALL_TARGETS = ("claude-user", "claude-project", "agents-md")
+
+
+@cli.command("install-skill")
+@click.option("--target", "targets", multiple=True,
+              type=click.Choice(_INSTALL_TARGETS),
+              help="Target to install to. Repeat for multiple. "
+                   "Omit to be prompted.")
+@click.option("--yes", "skip_confirm", is_flag=True, default=False,
+              help="Skip overwrite confirmations.")
+def install_skill_cmd(targets, skip_confirm):
+    """Install the Overture agent Skill (Claude Code / AGENTS.md)."""
+    if not targets:
+        targets = []
+        click.echo("Where should the Skill be installed?")
+        for t in _INSTALL_TARGETS:
+            if click.confirm(f"  Install to {t}?", default=(t == "claude-user")):
+                targets.append(t)
+        if not targets:
+            click.secho("No targets selected; nothing to do.", fg="yellow")
+            return
+
+    for t in targets:
+        if t == "claude-user":
+            target_path = skill_installer._claude_user_dir() / "SKILL.md"
+            if target_path.exists() and not skip_confirm:
+                if not click.confirm(f"Overwrite {target_path}?", default=True):
+                    continue
+            p = skill_installer.install_claude_user()
+            click.secho(f"Wrote {p}", fg="green")
+        elif t == "claude-project":
+            target_path = skill_installer._claude_project_dir() / "SKILL.md"
+            if target_path.exists() and not skip_confirm:
+                if not click.confirm(f"Overwrite {target_path}?", default=True):
+                    continue
+            p = skill_installer.install_claude_project()
+            click.secho(f"Wrote {p}", fg="green")
+        elif t == "agents-md":
+            p = skill_installer.install_agents_md()
+            click.secho(f"Updated {p}", fg="green")
 
 
 @cli.group()
