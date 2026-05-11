@@ -83,14 +83,14 @@ overturemaps download -t place --in "Boston, MA" \
 | `places --in … [--category C] [--where …] -f … [-o …]` | Intent verb for POIs. |
 | `buildings --in … [--where …] -f … [-o …]` | Intent verb for buildings. |
 | `roads --in … [--class C] [--where …] -f … [-o …]` | Intent verb for `segment`. |
-| `at LAT,LON [-t TYPE] [-n N] [-f FMT]` | Nearest-neighbor lookup at a point. |
-| `containing LAT,LON [-t division]` | Which divisions contain this point, innermost outward. |
+| `at LAT,LON [-t TYPE] [-n N] [-f FMT]` | Nearest-neighbor lookup at a point. `-t` defaults to `place`. |
+| `containing LAT,LON` | Which divisions contain this point, innermost outward. Returns a small structured list (id + name + subtype + admin_level + country/region); honors `--json`. |
 | `install-skill` | Interactive installer for the agent Skill / AGENTS.md. Also has non-interactive flags. |
 | `cache info \| clear \| build` | Manage the on-disk divisions index. |
 
 ### 4.4 Global flags
 
-- `--json` — affects only metadata commands (`where`, `count`, `themes`, `types`, `schema`, `categories`, `capabilities`, `releases *`, `cache info`). Data commands (`download`, `places`, `buildings`, `roads`, `sample`, `at`, `containing`, `gers`) already emit structured data and ignore it.
+- `--json` — affects metadata commands (`where`, `count`, `themes`, `types`, `schema`, `categories`, `capabilities`, `containing`, `releases *`, `cache info`). Data commands (`download`, `places`, `buildings`, `roads`, `sample`, `at`, `gers`) already emit structured data and ignore it.
 
 ## 5. Filter Syntax (`--where`)
 
@@ -106,7 +106,9 @@ overturemaps download -t place --in "Boston, MA" \
 
 ### 5.2 Translation
 
-Each `(KEY, OP, VALUE)` becomes a `pyarrow.compute.Expression`. The conjunction of all `--where` flags is passed to `_prepare_query` alongside the bbox filter. All filters push down to row-group level via existing PyArrow machinery; no change to the S3 read path.
+Each `(KEY, OP, VALUE)` becomes a `pyarrow.compute.Expression`. The conjunction of all `--where` flags is passed to `_prepare_query` alongside the bbox filter. Filters push down to row-group level via existing PyArrow machinery where the column has Parquet statistics; the S3 read path is unchanged.
+
+List-valued fields (e.g. `categories.alternate`, which is `list<string>`) are out of scope for `--where` in v1; agents filter on scalar fields like `categories.primary` instead. A `contains` operator on list fields can be added later without breaking existing usage.
 
 ### 5.3 Validation
 
@@ -130,7 +132,8 @@ Lazy on-disk index of Overture's `divisions/division` joined with `divisions/div
 ### 6.2 Build
 
 - Triggered automatically on the first command that needs it (`where`, `--in`, `containing`).
-- Reads the `division` and `division_area` partitions with column projection: `id`, `names.primary`, `names.common`, `subtype`, `class`, `country`, `region`, `admin_level`, `population`, `parent_division_id`, polygon bbox.
+- Reads the `division` and `division_area` partitions with column projection: `id`, `names.primary`, `names.common`, `subtype`, `class`, `country`, `region`, `admin_level`, `population`, `parent_division_id`, plus the polygon bbox from `division_area`.
+- Joined on the canonical `division ↔ division_area` link (the foreign-key column on `division_area` referencing `division.id`; exact column name resolved by implementation against the live schema).
 - Writes one parquet file at `$XDG_CACHE_HOME/overturemaps/divisions-index-<release>.parquet` (fallback `~/.cache/overturemaps/`). Expected size: 10–30 MB.
 
 ### 6.3 Invalidation
@@ -179,6 +182,7 @@ When `--json` is set on a metadata command:
 | `releases list` | Array of release strings, newest first. |
 | `releases latest` | Object with `release`. |
 | `cache info` | Object with `index_path`, `index_release`, `latest_release`, `up_to_date`, `size_bytes`. |
+| `containing` | Array of `{id, name, subtype, admin_level, country, region}`, innermost first. |
 
 ## 8. Intent Verbs
 
@@ -187,7 +191,7 @@ Each verb is a thin Click command that translates user input through `geocoding`
 - **`places`** — adds `-t place`. `--category VAL` desugars to `--where categories.primary=VAL`.
 - **`buildings`** — adds `-t building`.
 - **`roads`** — adds `-t segment` (not `connector`). `--class VAL` desugars to `--where class=VAL`.
-- **`at LAT,LON -t TYPE`** — builds a small bbox around the point using a per-type radius (100 m for `place`, 50 m for `building`, 25 m for `address`; configurable via `--radius`). Reads features, sorts by haversine distance to the query point in Python, limits to N (default 10). Returns GeoJSON unless `-o` indicates Parquet.
+- **`at LAT,LON [-t TYPE]`** — `-t` defaults to `place`. Builds a small bbox around the point using a per-type radius (100 m for `place`, 50 m for `building`, 25 m for `address`; configurable via `--radius`). Reads features, sorts by haversine distance to the query point in Python, limits to N (default 10). Output format follows `-f` (default `geojsonseq` to stdout when no `-o`); same writer pipeline as `download`.
 - **`containing LAT,LON`** — uses the divisions index to find candidate divisions whose bbox contains the point, then loads each candidate's polygon (via the `division_area` shard hinted by the index row) and uses Shapely `contains` to filter to true contains. Emits results in order of decreasing `admin_level` (innermost first).
 
 ## 9. Skill Installer + Skill Content
