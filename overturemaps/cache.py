@@ -74,3 +74,107 @@ def clear_cache() -> int:
     for _release, path in indexes:
         path.unlink()
     return len(indexes)
+
+
+import pyarrow as pa
+import pyarrow.compute as pc
+import pyarrow.dataset as ds
+import pyarrow.fs as _fs
+import pyarrow.parquet as pq
+
+
+_S3_BUCKET = "overturemaps-us-west-2"
+
+
+def _read_partition_columns(theme: str, type_: str, release: str, columns: list[str]) -> pa.Table:
+    """Read selected columns from a divisions partition on S3."""
+    path = f"{_S3_BUCKET}/release/{release}/theme={theme}/type={type_}/"
+    fs = _fs.S3FileSystem(anonymous=True, region="us-west-2")
+    dataset = ds.dataset(path, filesystem=fs)
+    return dataset.to_table(columns=columns)
+
+
+def build_index(release: str) -> Path:
+    """Read divisions data from S3 for `release` and write the local index parquet."""
+    div_cols = [
+        "id", "names", "subtype", "class", "country", "region",
+        "admin_level", "population", "parent_division_id",
+    ]
+    area_cols = ["division_id", "bbox"]
+
+    div = _read_partition_columns("divisions", "division", release, div_cols)
+    area = _read_partition_columns("divisions", "division_area", release, area_cols)
+
+    # Flatten names struct -> name_primary, name_common.
+    # In real Overture data, names.common is map<string, string> (language ->
+    # localized name), which the PyArrow join backend does not support as a
+    # non-key field.  Serialize it to a JSON string so it survives the join.
+    names_col = div.column("names").combine_chunks()
+    name_primary = pc.struct_field(names_col, "primary")
+    _name_common_raw = pc.struct_field(names_col, "common")
+    if pa.types.is_string(_name_common_raw.type) or pa.types.is_null(_name_common_raw.type):
+        name_common = _name_common_raw
+    else:
+        import json as _json
+        name_common = pa.array(
+            [
+                _json.dumps({k: v for k, v in val}) if val is not None else None
+                for val in _name_common_raw.to_pylist()
+            ],
+            type=pa.string(),
+        )
+
+    # Each division can have multiple division_area rows; combine to a single
+    # bbox by taking min(xmin), min(ymin), max(xmax), max(ymax) per division_id.
+    bbox_struct = area.column("bbox").combine_chunks()
+    area_flat = pa.table({
+        "division_id": area.column("division_id"),
+        "xmin": pc.struct_field(bbox_struct, "xmin"),
+        "ymin": pc.struct_field(bbox_struct, "ymin"),
+        "xmax": pc.struct_field(bbox_struct, "xmax"),
+        "ymax": pc.struct_field(bbox_struct, "ymax"),
+    })
+    bbox_agg = area_flat.group_by("division_id").aggregate([
+        ("xmin", "min"),
+        ("ymin", "min"),
+        ("xmax", "max"),
+        ("ymax", "max"),
+    ]).rename_columns([
+        "division_id", "bbox_xmin", "bbox_ymin", "bbox_xmax", "bbox_ymax",
+    ])
+
+    # Build the flat division table (without the names struct).
+    # Cast any null-typed columns to string so the join backend accepts them.
+    def _as_string(col: pa.ChunkedArray) -> pa.ChunkedArray:
+        if pa.types.is_null(col.type):
+            return col.cast(pa.string())
+        return col
+
+    div_flat = pa.table({
+        "id": div.column("id"),
+        "name_primary": name_primary,
+        "name_common": name_common,
+        "subtype": _as_string(div.column("subtype")),
+        "class": _as_string(div.column("class")),
+        "country": _as_string(div.column("country")),
+        "region": _as_string(div.column("region")),
+        "admin_level": div.column("admin_level"),
+        "population": div.column("population"),
+        "parent_division_id": _as_string(div.column("parent_division_id")),
+    })
+
+    # Inner join on id <-> division_id
+    joined = div_flat.join(bbox_agg, keys="id", right_keys="division_id", join_type="inner")
+
+    out = index_path(release)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(joined, out)
+    return out
+
+
+def ensure_index(latest_release: str) -> Path:
+    """Return the path to a current index, building it if missing or stale."""
+    target = index_path(latest_release)
+    if target.exists():
+        return target
+    return build_index(latest_release)
