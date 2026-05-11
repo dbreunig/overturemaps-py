@@ -5,6 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, List, Union
 
+import pyarrow as pa
+import pyarrow.compute as pc
+
 
 # Operators ordered longest-first so the splitter doesn't mistake `>=` for `>`.
 _OPERATORS = ["<=", ">=", "!=", " in ", "=", "<", ">"]
@@ -15,6 +18,28 @@ class ParsedFilter:
     key: str
     op: str  # one of: =, !=, <, <=, >, >=, in
     value: Any  # str | int | float | bool | list
+
+    def to_pyarrow_expression(self, schema: pa.Schema) -> pc.Expression:
+        """Build a pc.Expression resolving dotted keys against `schema`."""
+        # Walk dotted path -> pc.field(...) with nested struct access.
+        parts = self.key.split(".")
+        field_ref = pc.field(*parts) if len(parts) > 1 else pc.field(parts[0])
+
+        if self.op == "=":
+            return field_ref == self.value
+        if self.op == "!=":
+            return field_ref != self.value
+        if self.op == "<":
+            return field_ref < self.value
+        if self.op == "<=":
+            return field_ref <= self.value
+        if self.op == ">":
+            return field_ref > self.value
+        if self.op == ">=":
+            return field_ref >= self.value
+        if self.op == "in":
+            return field_ref.isin(self.value)
+        raise ValueError(f"Unsupported operator: {self.op!r}")
 
 
 def _coerce_scalar(raw: str) -> Union[str, int, float, bool]:
@@ -78,3 +103,14 @@ def parse_where_expr(expr: str) -> ParsedFilter:
         value = _coerce_scalar(value_raw)
 
     return ParsedFilter(key=key, op=op, value=value)
+
+
+def combine(filters: List[ParsedFilter], schema: pa.Schema) -> pc.Expression | None:
+    """AND-combine multiple filters into one expression."""
+    if not filters:
+        return None
+    exprs = [f.to_pyarrow_expression(schema) for f in filters]
+    result = exprs[0]
+    for e in exprs[1:]:
+        result = result & e
+    return result

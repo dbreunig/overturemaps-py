@@ -1,5 +1,7 @@
 """Tests for the --where filter parser."""
 
+import pyarrow as pa
+import pyarrow.compute as pc
 import pytest
 
 from overturemaps.filters import parse_where_expr, ParsedFilter
@@ -79,3 +81,33 @@ class TestParseWhereExpr:
     def test_empty_value_raises(self):
         with pytest.raises(ValueError, match="empty value"):
             parse_where_expr("key=")
+
+
+class TestToPyarrowExpression:
+    def test_simple_equality(self):
+        schema = pa.schema([("class", pa.string())])
+        f = ParsedFilter("class", "=", "motorway")
+        expr = f.to_pyarrow_expression(schema)
+        # Just verify it's an Expression; equality semantics are tested at
+        # integration time against a real dataset.
+        assert isinstance(expr, pc.Expression)
+
+    def test_nested_field(self):
+        schema = pa.schema([
+            ("categories", pa.struct([("primary", pa.string())])),
+        ])
+        f = ParsedFilter("categories.primary", "=", "restaurant")
+        expr = f.to_pyarrow_expression(schema)
+        assert isinstance(expr, pc.Expression)
+
+    def test_in_operator(self):
+        schema = pa.schema([("class", pa.string())])
+        f = ParsedFilter("class", "in", ["motorway", "primary"])
+        expr = f.to_pyarrow_expression(schema)
+        assert isinstance(expr, pc.Expression)
+
+    def test_numeric_comparison(self):
+        schema = pa.schema([("height", pa.float64())])
+        f = ParsedFilter("height", ">", 100)
+        expr = f.to_pyarrow_expression(schema)
+        assert isinstance(expr, pc.Expression)
