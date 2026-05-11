@@ -7,6 +7,12 @@ import re
 from pathlib import Path
 from typing import Optional
 
+import pyarrow as pa
+import pyarrow.compute as pc
+import pyarrow.dataset as ds
+import pyarrow.fs as _fs
+import pyarrow.parquet as pq
+
 
 _INDEX_FILE_RE = re.compile(r"^divisions-index-(.+)\.parquet$")
 
@@ -76,13 +82,6 @@ def clear_cache() -> int:
     return len(indexes)
 
 
-import pyarrow as pa
-import pyarrow.compute as pc
-import pyarrow.dataset as ds
-import pyarrow.fs as _fs
-import pyarrow.parquet as pq
-
-
 _S3_BUCKET = "overturemaps-us-west-2"
 
 
@@ -105,24 +104,14 @@ def build_index(release: str) -> Path:
     div = _read_partition_columns("divisions", "division", release, div_cols)
     area = _read_partition_columns("divisions", "division_area", release, area_cols)
 
-    # Flatten names struct -> name_primary, name_common.
-    # In real Overture data, names.common is map<string, string> (language ->
-    # localized name), which the PyArrow join backend does not support as a
-    # non-key field.  Serialize it to a JSON string so it survives the join.
+    # Flatten names struct -> name_primary only.
+    # names.common is map<string, string> (language -> localized name) in real
+    # Overture data; PyArrow's join backend rejects map and list types as
+    # non-key fields.  v1 of the index therefore matches only against
+    # name_primary.  Common-name match coverage can be revisited if user
+    # feedback warrants the complexity.
     names_col = div.column("names").combine_chunks()
     name_primary = pc.struct_field(names_col, "primary")
-    _name_common_raw = pc.struct_field(names_col, "common")
-    if pa.types.is_string(_name_common_raw.type) or pa.types.is_null(_name_common_raw.type):
-        name_common = _name_common_raw
-    else:
-        import json as _json
-        name_common = pa.array(
-            [
-                _json.dumps({k: v for k, v in val}) if val is not None else None
-                for val in _name_common_raw.to_pylist()
-            ],
-            type=pa.string(),
-        )
 
     # Each division can have multiple division_area rows; combine to a single
     # bbox by taking min(xmin), min(ymin), max(xmax), max(ymax) per division_id.
@@ -153,7 +142,6 @@ def build_index(release: str) -> Path:
     div_flat = pa.table({
         "id": div.column("id"),
         "name_primary": name_primary,
-        "name_common": name_common,
         "subtype": _as_string(div.column("subtype")),
         "class": _as_string(div.column("class")),
         "country": _as_string(div.column("country")),

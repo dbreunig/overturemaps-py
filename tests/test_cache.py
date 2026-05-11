@@ -102,6 +102,13 @@ class _FakeArrowFn:
 
 
 def _fake_division_table():
+    # names.common matches the real Overture schema: map<string, string>.
+    # All entries are None here to keep the fixture simple; the integration
+    # test exercises real map values against S3 data.
+    names_type = pa.struct([
+        ("primary", pa.string()),
+        ("common", pa.map_(pa.string(), pa.string())),
+    ])
     return pa.table({
         "id": ["d1", "d2", "d3"],
         "names": pa.array(
@@ -110,7 +117,7 @@ def _fake_division_table():
                 {"primary": "Cambridge", "common": None},
                 {"primary": "Boston", "common": None},
             ],
-            type=pa.struct([("primary", pa.string()), ("common", pa.string())]),
+            type=names_type,
         ),
         "subtype": ["locality", "locality", "locality"],
         "class": [None, None, None],
@@ -167,10 +174,11 @@ def test_build_index_writes_joined_parquet(monkeypatch, tmp_path):
     # 3 input rows, all joined successfully
     assert table.num_rows == 3
     assert set(table.column_names) >= {
-        "id", "name_primary", "name_common", "subtype", "country",
+        "id", "name_primary", "subtype", "country",
         "region", "admin_level", "population", "parent_division_id",
         "bbox_xmin", "bbox_ymin", "bbox_xmax", "bbox_ymax",
     }
+    assert "name_common" not in table.column_names
 
 
 def test_ensure_index_skips_when_current(monkeypatch, tmp_path):
