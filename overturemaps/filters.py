@@ -53,13 +53,13 @@ class ParsedFilter:
             )
         # Walk into nested struct types if dotted
         current_type = schema.field(top).type
-        for part in parts[1:]:
+        for i, part in enumerate(parts[1:], start=1):
             if not pa.types.is_struct(current_type):
                 raise ValueError(
                     f"Field {self.key!r} is invalid: "
-                    f"{'.'.join(parts[:parts.index(part)])} is not a struct"
+                    f"{'.'.join(parts[:i])} is not a struct"
                 )
-            child_names = [current_type.field(i).name for i in range(current_type.num_fields)]
+            child_names = [current_type.field(j).name for j in range(current_type.num_fields)]
             if part not in child_names:
                 raise ValueError(
                     f"Unknown field {self.key!r}. "

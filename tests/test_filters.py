@@ -151,3 +151,13 @@ class TestValidateAgainstSchema:
         f = ParsedFilter("height.foo", "=", 1)
         with pytest.raises(ValueError):
             f.validate_against_schema(schema)
+
+    def test_duplicate_segment_error_message(self):
+        """Path with duplicate segments still produces the correct error position."""
+        schema = pa.schema([
+            ("a", pa.struct([("b", pa.int64())])),  # a.b is an int (not struct)
+        ])
+        f = ParsedFilter("a.b.c", "=", 1)  # trying to dot into the int
+        with pytest.raises(ValueError) as exc:
+            f.validate_against_schema(schema)
+        assert "a.b is not a struct" in str(exc.value)
