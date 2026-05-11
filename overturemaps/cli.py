@@ -16,7 +16,7 @@ import click
 import orjson
 
 from .changelog import query_changelog_ids, summarize_changelog
-from .introspection import list_themes, list_types
+from .introspection import list_themes, list_types, flatten_schema
 from .core import (
     count_rows,
     get_all_overture_types,
@@ -548,6 +548,53 @@ def types(ctx, theme):
         click.echo(f"  theme: {t['theme']}")
         click.echo(f"  {t['description']}")
         click.echo()
+
+
+@cli.command()
+@click.option("-t", "--type", "type_",
+              type=click.Choice(get_all_overture_types()), required=True)
+@click.option("-r", "--release", default=None, callback=validate_release,
+              required=False)
+@click.pass_context
+def schema(ctx, type_, release):
+    """Show the schema and a sample feature for an Overture type.
+
+    Uses a tiny bbox over a known-populated area to keep this fast.
+    """
+    # A bbox over Manhattan, NYC — densely populated for any type.
+    sample_bbox = [-74.020, 40.700, -73.930, 40.800]
+    reader = record_batch_reader(
+        type_, sample_bbox, release, None, None, True,
+    )
+    if reader is None:
+        raise click.ClickException(f"No features available for type {type_!r}")
+
+    sample = None
+    try:
+        batch = reader.read_next_batch()
+        if batch.num_rows > 0:
+            sample = batch.slice(0, 1).to_pylist()[0]
+    except StopIteration:
+        pass
+
+    fields = flatten_schema(reader.schema)
+    payload = {
+        "type": type_,
+        "fields": fields,
+        "example": sample,
+    }
+
+    if ctx.obj.get("json"):
+        _emit_json(ctx, payload)
+        return
+
+    click.secho(f"Schema for type {type_!r}", bold=True)
+    for f in fields:
+        click.echo(f"  {f['name']}: {f['type']}")
+    click.echo()
+    if sample is not None:
+        click.secho("Example feature:", bold=True)
+        click.echo(orjson.dumps(sample, option=orjson.OPT_INDENT_2).decode())
 
 
 @cli.group()
