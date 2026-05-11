@@ -41,6 +41,32 @@ class ParsedFilter:
             return field_ref.isin(self.value)
         raise ValueError(f"Unsupported operator: {self.op!r}")
 
+    def validate_against_schema(self, schema: pa.Schema) -> None:
+        """Verify self.key resolves to a field in `schema`; raise ValueError otherwise."""
+        parts = self.key.split(".")
+        # Top-level lookup
+        top = parts[0]
+        if top not in schema.names:
+            raise ValueError(
+                f"Unknown field {self.key!r}. Available fields: "
+                f"{', '.join(sorted(schema.names))}"
+            )
+        # Walk into nested struct types if dotted
+        current_type = schema.field(top).type
+        for part in parts[1:]:
+            if not pa.types.is_struct(current_type):
+                raise ValueError(
+                    f"Field {self.key!r} is invalid: "
+                    f"{'.'.join(parts[:parts.index(part)])} is not a struct"
+                )
+            child_names = [current_type.field(i).name for i in range(current_type.num_fields)]
+            if part not in child_names:
+                raise ValueError(
+                    f"Unknown field {self.key!r}. "
+                    f"Available subfields: {', '.join(sorted(child_names))}"
+                )
+            current_type = current_type.field(child_names.index(part)).type
+
 
 def _coerce_scalar(raw: str) -> Union[str, int, float, bool]:
     s = raw.strip()
@@ -106,9 +132,11 @@ def parse_where_expr(expr: str) -> ParsedFilter:
 
 
 def combine(filters: List[ParsedFilter], schema: pa.Schema) -> pc.Expression | None:
-    """AND-combine multiple filters into one expression."""
+    """AND-combine filters, validating each against the schema."""
     if not filters:
         return None
+    for f in filters:
+        f.validate_against_schema(schema)
     exprs = [f.to_pyarrow_expression(schema) for f in filters]
     result = exprs[0]
     for e in exprs[1:]:

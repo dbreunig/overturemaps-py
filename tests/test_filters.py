@@ -111,3 +111,43 @@ class TestToPyarrowExpression:
         f = ParsedFilter("height", ">", 100)
         expr = f.to_pyarrow_expression(schema)
         assert isinstance(expr, pc.Expression)
+
+
+class TestValidateAgainstSchema:
+    def test_top_level_field_ok(self):
+        schema = pa.schema([("height", pa.float64())])
+        f = ParsedFilter("height", ">", 50)
+        # Should not raise
+        f.validate_against_schema(schema)
+
+    def test_nested_field_ok(self):
+        schema = pa.schema([
+            ("categories", pa.struct([("primary", pa.string())])),
+        ])
+        f = ParsedFilter("categories.primary", "=", "restaurant")
+        f.validate_against_schema(schema)
+
+    def test_unknown_top_level_raises(self):
+        schema = pa.schema([("height", pa.float64())])
+        f = ParsedFilter("widht", ">", 50)  # typo
+        with pytest.raises(ValueError) as exc:
+            f.validate_against_schema(schema)
+        assert "widht" in str(exc.value)
+        assert "available fields" in str(exc.value).lower()
+        assert "height" in str(exc.value)
+
+    def test_unknown_nested_raises(self):
+        schema = pa.schema([
+            ("categories", pa.struct([("primary", pa.string())])),
+        ])
+        f = ParsedFilter("categories.banana", "=", "x")
+        with pytest.raises(ValueError) as exc:
+            f.validate_against_schema(schema)
+        assert "categories.banana" in str(exc.value)
+        assert "primary" in str(exc.value)
+
+    def test_dotted_into_non_struct_raises(self):
+        schema = pa.schema([("height", pa.float64())])
+        f = ParsedFilter("height.foo", "=", 1)
+        with pytest.raises(ValueError):
+            f.validate_against_schema(schema)
