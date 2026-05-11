@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 
 import click
 import orjson
+import pyarrow.compute as pc
+import pyarrow.parquet as pq
 
 from .changelog import query_changelog_ids, summarize_changelog
 from .introspection import list_themes, list_types, flatten_schema
@@ -960,6 +962,101 @@ def at(latlon, type_, n, radius, output_format, output, release):
 
     with get_writer(output_format, output_file, schema=new_schema) as writer:
         copy(one_shot, writer)
+
+
+def _polygon_contains(division_id: str, lon: float, lat: float) -> bool:
+    """True if the division_area polygon for `division_id` contains the point.
+
+    Reads the polygon from the `division_area` S3 partition for the latest
+    release, on demand. Cached per-process via the module-level dict.
+    """
+    import pyarrow.dataset as ds
+    import pyarrow.fs as _fs
+    import pyarrow.compute as _pc
+    import shapely.wkb
+
+    cache = _polygon_contains._cache  # type: ignore[attr-defined]
+    if division_id in cache:
+        poly = cache[division_id]
+    else:
+        release = get_latest_release()
+        path = f"overturemaps-us-west-2/release/{release}/theme=divisions/type=division_area/"
+        fs = _fs.S3FileSystem(anonymous=True, region="us-west-2")
+        dataset = ds.dataset(path, filesystem=fs)
+        filter_expr = _pc.field("division_id") == division_id
+        table = dataset.to_table(columns=["geometry"], filter=filter_expr)
+        if table.num_rows == 0:
+            cache[division_id] = None
+            return False
+        # union the polygons (a division can have multiple division_area rows)
+        geoms = [shapely.wkb.loads(b) for b in table.column("geometry").to_pylist()]
+        from shapely.ops import unary_union
+        poly = unary_union(geoms)
+        cache[division_id] = poly
+
+    if poly is None:
+        return False
+    from shapely.geometry import Point
+    return poly.contains(Point(lon, lat))
+
+
+_polygon_contains._cache = {}  # type: ignore[attr-defined]
+
+
+@cli.command()
+@click.argument("latlon", type=str)
+@click.pass_context
+def containing(ctx, latlon):
+    """Which divisions contain this point? Innermost (highest admin_level) first."""
+    parts = [p.strip() for p in latlon.split(",")]
+    if len(parts) != 2:
+        raise click.UsageError("LATLON must be 'LAT,LON'")
+    try:
+        lat = float(parts[0])
+        lon = float(parts[1])
+    except ValueError:
+        raise click.UsageError("LATLON values must be numeric")
+
+    release = get_latest_release()
+    from .cache import ensure_index
+    index_p = ensure_index(release)
+    table = pq.read_table(index_p)
+
+    # bbox-contains-point candidates
+    expr = (
+        (pc.field("bbox_xmin") <= lon)
+        & (pc.field("bbox_xmax") >= lon)
+        & (pc.field("bbox_ymin") <= lat)
+        & (pc.field("bbox_ymax") >= lat)
+    )
+    candidates = table.filter(expr).to_pylist()
+
+    # Confirm via polygon containment
+    matches = [
+        c for c in candidates
+        if _polygon_contains(c["id"], lon, lat)
+    ]
+    # Innermost (highest admin_level) first
+    matches.sort(key=lambda c: c["admin_level"], reverse=True)
+
+    payload = [
+        {
+            "id": c["id"],
+            "name": c["name_primary"],
+            "subtype": c["subtype"],
+            "admin_level": c["admin_level"],
+            "country": c["country"],
+            "region": c["region"],
+        }
+        for c in matches
+    ]
+
+    if ctx.obj.get("json"):
+        _emit_json(ctx, payload)
+        return
+    for row in payload:
+        loc = row["region"] or row["country"] or "?"
+        click.secho(f"  {row['name']} ({row['subtype']}, {loc})", fg="cyan")
 
 
 @cli.group()
