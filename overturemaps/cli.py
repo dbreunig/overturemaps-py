@@ -30,7 +30,7 @@ from .models import Backend, BBox, PipelineState
 from .releases import list_releases, release_exists
 from .state import get_state_path, load_state, save_state
 from .writers import copy, get_writer
-from .filters import parse_where_expr
+from .filters import parse_where_expr, ParsedFilter
 from .geocoding import best_match, resolve
 from .cache import cache_info, clear_cache, build_index, index_path
 
@@ -753,6 +753,50 @@ def cache_build_cmd():
                 fg="bright_black", err=True)
     p = build_index(release)
     click.secho(f"Wrote {p}", fg="green", err=True)
+
+
+@cli.command()
+@click.option("--in", "in_place", required=True, type=str)
+@click.option("--category", required=False, type=str,
+              help="Shortcut for --where categories.primary=VAL")
+@click.option("--where", "where_exprs", multiple=True)
+@click.option("-f", "output_format",
+              type=click.Choice(["geojson", "geojsonseq", "geoparquet"]),
+              default="geojsonseq", show_default=True)
+@click.option("-o", "--output", required=False, type=click.Path())
+@click.option("-r", "--release", default=None, callback=validate_release,
+              required=False)
+def places(in_place, category, where_exprs, output_format, output, release):
+    """Download POIs in a named place. Filter by --category for common asks."""
+    try:
+        division = best_match(in_place)
+    except LookupError as e:
+        raise click.UsageError(str(e))
+    bbox = list(division.bbox)
+
+    try:
+        filters = [parse_where_expr(e) for e in where_exprs]
+    except ValueError as e:
+        raise click.UsageError(str(e))
+    if category is not None:
+        filters.append(ParsedFilter(
+            key="categories.primary", op="=", value=category,
+        ))
+
+    if output_format == "geoparquet" and output is None:
+        raise click.UsageError("Output file (-o/--output) is required for geoparquet")
+
+    output_file = sys.stdout if output is None else output
+
+    reader = record_batch_reader(
+        "place", bbox, release, None, None, True,
+        where_filters=filters or None,
+    )
+    if reader is None:
+        return
+
+    with get_writer(output_format, output_file, schema=reader.schema) as writer:
+        copy(reader, writer)
 
 
 @cli.group()
