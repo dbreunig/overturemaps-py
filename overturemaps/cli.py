@@ -17,6 +17,7 @@ import orjson
 
 from .changelog import query_changelog_ids, summarize_changelog
 from .introspection import list_themes, list_types, flatten_schema
+from .intents import bbox_around_point, haversine_meters, DEFAULT_RADIUS_BY_TYPE
 from .core import (
     count_rows,
     get_all_overture_types,
@@ -872,6 +873,93 @@ def roads(in_place, road_class, where_exprs, output_format, output, release):
         return
     with get_writer(output_format, output_file, schema=reader.schema) as writer:
         copy(reader, writer)
+
+
+@cli.command()
+@click.argument("latlon", type=str)
+@click.option("-t", "--type", "type_",
+              type=click.Choice(get_all_overture_types()), default="place",
+              show_default=True)
+@click.option("-n", default=10, show_default=True, type=int)
+@click.option("--radius", type=int, required=False,
+              help="Radius in meters; defaults per type.")
+@click.option("-f", "output_format",
+              type=click.Choice(["geojson", "geojsonseq", "geoparquet"]),
+              default="geojsonseq", show_default=True)
+@click.option("-o", "--output", required=False, type=click.Path())
+@click.option("-r", "--release", default=None, callback=validate_release,
+              required=False)
+def at(latlon, type_, n, radius, output_format, output, release):
+    """Nearest-neighbor lookup. LATLON is 'LAT,LON' (lat first, geographic)."""
+    parts = [p.strip() for p in latlon.split(",")]
+    if len(parts) != 2:
+        raise click.UsageError("LATLON must be 'LAT,LON'")
+    try:
+        lat = float(parts[0])
+        lon = float(parts[1])
+    except ValueError:
+        raise click.UsageError("LATLON values must be numeric")
+
+    if radius is None:
+        radius = DEFAULT_RADIUS_BY_TYPE.get(type_, 100)
+    bbox = list(bbox_around_point(lat, lon, radius))
+
+    reader = record_batch_reader(type_, bbox, release, None, None, True)
+    if reader is None:
+        return
+
+    # Collect all matching features, compute distance, sort, keep top N.
+    import shapely.wkb
+    import pyarrow as pa
+
+    rows: list[tuple[float, dict, bytes]] = []
+    while True:
+        try:
+            batch = reader.read_next_batch()
+        except StopIteration:
+            break
+        if batch.num_rows == 0:
+            continue
+        geom_blobs = batch.column("geometry").to_pylist()
+        prop_cols = [c for c in batch.schema.names if c not in ("geometry", "bbox")]
+        prop_rows = batch.select(prop_cols).to_pylist()
+        for blob, prop in zip(geom_blobs, prop_rows):
+            try:
+                geom = shapely.wkb.loads(blob)
+                centroid = geom.centroid
+                d = haversine_meters(lat, lon, centroid.y, centroid.x)
+            except Exception:
+                continue
+            rows.append((d, prop, blob))
+
+    rows.sort(key=lambda x: x[0])
+    rows = rows[:n]
+
+    if output_format == "geoparquet" and output is None:
+        raise click.UsageError("Output file (-o/--output) is required for geoparquet")
+    output_file = sys.stdout if output is None else output
+
+    # Build a fresh reader over the kept rows and stream through the writer.
+    if not rows:
+        return
+
+    sample_batch_props = [r[1] for r in rows]
+    sample_batch_geoms = [r[2] for r in rows]
+    new_schema = pa.schema(
+        [(name, reader.schema.field(name).type) for name in reader.schema.names]
+    )
+
+    # Build one batch carrying back properties + geometry; rely on existing writer.
+    out_rows = []
+    for prop, blob in zip(sample_batch_props, sample_batch_geoms):
+        row = dict(prop)
+        row["geometry"] = blob
+        out_rows.append(row)
+    batch = pa.RecordBatch.from_pylist(out_rows, schema=new_schema)
+    one_shot = pa.RecordBatchReader.from_batches(new_schema, iter([batch]))
+
+    with get_writer(output_format, output_file, schema=new_schema) as writer:
+        copy(one_shot, writer)
 
 
 @cli.group()
