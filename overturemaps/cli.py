@@ -799,6 +799,41 @@ def places(in_place, category, where_exprs, output_format, output, release):
         copy(reader, writer)
 
 
+@cli.command()
+@click.option("--in", "in_place", required=True, type=str)
+@click.option("--where", "where_exprs", multiple=True)
+@click.option("-f", "output_format",
+              type=click.Choice(["geojson", "geojsonseq", "geoparquet"]),
+              default="geojsonseq", show_default=True)
+@click.option("-o", "--output", required=False, type=click.Path())
+@click.option("-r", "--release", default=None, callback=validate_release,
+              required=False)
+def buildings(in_place, where_exprs, output_format, output, release):
+    """Download buildings in a named place."""
+    try:
+        division = best_match(in_place)
+    except LookupError as e:
+        raise click.UsageError(str(e))
+    bbox = list(division.bbox)
+
+    try:
+        filters = [parse_where_expr(e) for e in where_exprs] or None
+    except ValueError as e:
+        raise click.UsageError(str(e))
+
+    if output_format == "geoparquet" and output is None:
+        raise click.UsageError("Output file (-o/--output) is required for geoparquet")
+    output_file = sys.stdout if output is None else output
+
+    reader = record_batch_reader(
+        "building", bbox, release, None, None, True, where_filters=filters,
+    )
+    if reader is None:
+        return
+    with get_writer(output_format, output_file, schema=reader.schema) as writer:
+        copy(reader, writer)
+
+
 @cli.group()
 def releases():
     """Manage and query Overture Maps releases."""
