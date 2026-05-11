@@ -205,7 +205,12 @@ def download(
         )
 
     # Parse --where expressions
-    where_filters = [parse_where_expr(e) for e in where_exprs] if where_exprs else None
+    where_filters = None
+    if where_exprs:
+        try:
+            where_filters = [parse_where_expr(e) for e in where_exprs]
+        except ValueError as e:
+            raise click.UsageError(str(e))
 
     if bbox is None:
         click.secho(

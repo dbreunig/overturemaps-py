@@ -339,3 +339,17 @@ def test_download_with_where_passes_filter_to_reader(monkeypatch):
         assert captured["where_filters"][0].key == "height"
         assert captured["where_filters"][0].op == ">"
         assert captured["where_filters"][0].value == 50
+
+
+def test_download_malformed_where_clean_error():
+    """A malformed --where expression yields a clean UsageError, not a traceback."""
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["download", "-t", "building", "-f", "geojson",
+         "-o", "out.geojson", "--bbox", "-71,42,-70,43",
+         "--where", "just_a_key"],
+    )
+    assert result.exit_code != 0
+    # The error message comes from parse_where_expr's ValueError
+    assert "Could not parse" in result.output
