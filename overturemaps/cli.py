@@ -27,6 +27,8 @@ from .models import Backend, BBox, PipelineState
 from .releases import list_releases, release_exists
 from .state import get_state_path, load_state, save_state
 from .writers import copy, get_writer
+from .filters import parse_where_expr
+from .geocoding import best_match
 
 
 # Earth's total surface area in square degrees (360 * 180).
@@ -144,6 +146,10 @@ def cli(ctx):
 
 @cli.command()
 @click.option("--bbox", required=False, type=BboxParamType())
+@click.option("--in", "in_place", required=False, type=str,
+              help="Resolve a place name to a bbox via the divisions index.")
+@click.option("--where", "where_exprs", multiple=True,
+              help="Attribute filter K OP V (repeatable). Example: --where height>50")
 @click.option(
     "-f",
     "output_format",
@@ -177,8 +183,30 @@ def cli(ctx):
 @click.option("--connect_timeout", required=False, type=int)
 @click.option("--request_timeout", required=False, type=int)
 def download(
-    bbox, output_format, output, type_, release, connect_timeout, request_timeout, stac
+    bbox, in_place, where_exprs, output_format, output, type_, release,
+    connect_timeout, request_timeout, stac,
 ):
+    # Mutual exclusion check
+    if bbox is not None and in_place is not None:
+        raise click.UsageError("--bbox and --in are mutually exclusive")
+
+    # Resolve --in to bbox
+    if in_place is not None:
+        try:
+            division = best_match(in_place)
+        except LookupError as e:
+            raise click.UsageError(str(e))
+        bbox = list(division.bbox)
+        click.secho(
+            f"Resolved {in_place!r} -> {division.name} "
+            f"({division.subtype}, {division.region or division.country}, "
+            f"pop {division.population})",
+            fg="bright_black", err=True,
+        )
+
+    # Parse --where expressions
+    where_filters = [parse_where_expr(e) for e in where_exprs] if where_exprs else None
+
     if bbox is None:
         click.secho(
             "Warning: No bounding box provided. Downloading the entire dataset "
@@ -211,7 +239,8 @@ def download(
     output_file = sys.stdout if output is None else output
 
     reader = record_batch_reader(
-        type_, bbox, release, connect_timeout, request_timeout, stac
+        type_, bbox, release, connect_timeout, request_timeout, stac,
+        where_filters=where_filters,
     )
 
     if reader is None:

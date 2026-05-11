@@ -232,6 +232,7 @@ def _prepare_query(
     connect_timeout=None,
     request_timeout=None,
     stac=False,
+    where_filters=None,
 ) -> Optional[Tuple[ds.Dataset, Optional[pc.Expression]]]:
     """
     Resolve the S3 dataset and filter expression for a given query.
@@ -252,6 +253,7 @@ def _prepare_query(
         if intersecting_files is not None and len(intersecting_files) == 0:
             return None
 
+    filter_expr = None
     if bbox_obj:
         xmin, ymin, xmax, ymax = bbox_obj.as_tuple()
         filter_expr = (
@@ -260,8 +262,6 @@ def _prepare_query(
             & (pc.field("bbox", "ymin") < ymax)
             & (pc.field("bbox", "ymax") > ymin)
         )
-    else:
-        filter_expr = None
 
     dataset = ds.dataset(
         intersecting_files if intersecting_files is not None else path,
@@ -273,6 +273,12 @@ def _prepare_query(
         ),
     )
 
+    if where_filters:
+        from .filters import combine
+        attr_expr = combine(list(where_filters), dataset.schema)
+        if attr_expr is not None:
+            filter_expr = attr_expr if filter_expr is None else filter_expr & attr_expr
+
     return dataset, filter_expr
 
 
@@ -283,10 +289,12 @@ def count_rows(
     connect_timeout=None,
     request_timeout=None,
     stac=False,
+    where_filters=None,
 ) -> int:
     """Return the number of rows matching the given parameters."""
     result = _prepare_query(
-        overture_type, bbox, release, connect_timeout, request_timeout, stac
+        overture_type, bbox, release, connect_timeout, request_timeout, stac,
+        where_filters=where_filters,
     )
     if result is None:
         return 0
@@ -302,10 +310,12 @@ def record_batch_reader(
     connect_timeout=None,
     request_timeout=None,
     stac=False,
+    where_filters=None,
 ) -> Optional[pa.RecordBatchReader]:
     """Return a pyarrow RecordBatchReader for the desired bounding box and s3 path, or None on error."""
     result = _prepare_query(
-        overture_type, bbox, release, connect_timeout, request_timeout, stac
+        overture_type, bbox, release, connect_timeout, request_timeout, stac,
+        where_filters=where_filters,
     )
     if result is None:
         return None

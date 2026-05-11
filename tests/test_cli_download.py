@@ -255,3 +255,87 @@ def test_download_invalid_release_explains_retention_policy(monkeypatch):
     assert "60 days" in result.output
     assert "2026-03-18.0" in result.output
     assert "docs.overturemaps.org/release-calendar" in result.output
+
+
+def test_download_with_in_flag_resolves_to_bbox(monkeypatch):
+    """`--in` resolves a place to a bbox and feeds it through the pipeline."""
+    from overturemaps.geocoding import Division
+
+    captured = {}
+
+    def fake_best_match(query):
+        captured["query"] = query
+        return Division(
+            id="boston-ma", name="Boston", subtype="locality",
+            country="US", region="US-MA",
+            admin_level=8, population=654776, parent_division_id="ma",
+            bbox=(-71.19, 42.23, -70.99, 42.40),
+        )
+
+    monkeypatch.setattr("overturemaps.cli.best_match", fake_best_match)
+    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2025-12-17.0")
+
+    def fake_reader(type_, bbox, *args, **kwargs):
+        captured["bbox"] = bbox
+        captured["type"] = type_
+        return _DummyReader()
+
+    monkeypatch.setattr("overturemaps.cli.record_batch_reader", fake_reader)
+    monkeypatch.setattr("overturemaps.cli.get_writer", lambda *a, **k: _DummyWriter())
+    monkeypatch.setattr("overturemaps.cli.copy", lambda *a, **k: None)
+    monkeypatch.setattr("overturemaps.cli.save_state", lambda *a, **k: None)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(
+            cli,
+            ["download", "-t", "building", "-f", "geojson",
+             "-o", "out.geojson", "--in", "Boston, MA"],
+        )
+        assert result.exit_code == 0, result.output
+        assert captured["query"] == "Boston, MA"
+        assert captured["bbox"] == [-71.19, 42.23, -70.99, 42.40]
+
+
+def test_download_rejects_in_and_bbox_together():
+    """`--in` and `--bbox` are mutually exclusive."""
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["download", "-t", "building", "-f", "geojson",
+         "-o", "out.geojson", "--in", "Boston", "--bbox", "-71,42,-70,43"],
+    )
+    assert result.exit_code != 0
+    assert "mutually exclusive" in result.output.lower() or "cannot be used together" in result.output.lower()
+
+
+def test_download_with_where_passes_filter_to_reader(monkeypatch):
+    """`--where` is parsed and passed alongside the bbox filter."""
+    captured = {}
+
+    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2025-12-17.0")
+
+    def fake_reader(type_, bbox, release, ct, rt, stac, where_filters=None):
+        captured["where_filters"] = where_filters
+        return _DummyReader()
+
+    # We're going to overwrite record_batch_reader to accept the new kwarg.
+    monkeypatch.setattr("overturemaps.cli.record_batch_reader", fake_reader)
+    monkeypatch.setattr("overturemaps.cli.get_writer", lambda *a, **k: _DummyWriter())
+    monkeypatch.setattr("overturemaps.cli.copy", lambda *a, **k: None)
+    monkeypatch.setattr("overturemaps.cli.save_state", lambda *a, **k: None)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(
+            cli,
+            ["download", "-t", "building", "-f", "geojson",
+             "-o", "out.geojson", "--bbox", "-71.1,42.3,-71.0,42.4",
+             "--where", "height>50"],
+        )
+        assert result.exit_code == 0, result.output
+        assert captured["where_filters"] is not None
+        assert len(captured["where_filters"]) == 1
+        assert captured["where_filters"][0].key == "height"
+        assert captured["where_filters"][0].op == ">"
+        assert captured["where_filters"][0].value == 50
