@@ -42,7 +42,7 @@ def test_containing_returns_innermost_first(monkeypatch, tmp_path):
     # We stub _polygon_contains to always return True so the test doesn't hit S3.
     monkeypatch.setattr(
         "overturemaps.cli._polygon_contains",
-        lambda division_id, lon, lat: True,
+        lambda division_id, lon, lat, candidate_bbox=None, geometry_wkb=None: True,
     )
 
     _write_index(tmp_path)

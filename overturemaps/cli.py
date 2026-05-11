@@ -965,31 +965,121 @@ def at(latlon, type_, n, radius, output_format, output, release):
         copy(one_shot, writer)
 
 
-def _polygon_contains(division_id: str, lon: float, lat: float) -> bool:
+def _get_division_area_files(release: str, candidate_bbox: tuple) -> list:
+    """Return S3 paths for division_area files that intersect candidate_bbox.
+
+    Uses the STAC collections parquet (cached per process) to restrict the
+    file list so we only open the 1-3 files relevant to a given candidate
+    instead of all 8 in the partition.
+
+    candidate_bbox is (xmin, ymin, xmax, ymax).
+    """
+    import io
+    import pyarrow.parquet as _pq
+    import pyarrow.compute as _pc
+    from urllib.request import urlopen
+
+    stac_cache = _get_division_area_files._stac_cache  # type: ignore[attr-defined]
+    stac_table = stac_cache.get(release)
+    if stac_table is None:
+        stac_url = f"https://stac.overturemaps.org/{release}/collections.parquet"
+        try:
+            with urlopen(stac_url) as response:
+                buf = io.BytesIO(response.read())
+            stac_table = _pq.read_table(buf)
+        except Exception:
+            stac_table = None
+        stac_cache[release] = stac_table
+
+    if stac_table is None:
+        # STAC unavailable — return None to signal fallback to full partition
+        return []
+
+    xmin, ymin, xmax, ymax = candidate_bbox
+    type_filter = (
+        (_pc.field("collection") == "division_area")
+        & (_pc.field("type") == "Feature")
+    )
+    bbox_filter = (
+        (_pc.field("bbox", "xmin") < xmax)
+        & (_pc.field("bbox", "xmax") > xmin)
+        & (_pc.field("bbox", "ymin") < ymax)
+        & (_pc.field("bbox", "ymax") > ymin)
+    )
+    rows = stac_table.filter(type_filter & bbox_filter).to_pylist()
+    return [
+        r["assets"]["aws"]["alternate"]["s3"]["href"][len("s3://"):]
+        for r in rows
+    ]
+
+
+_get_division_area_files._stac_cache = {}  # type: ignore[attr-defined]
+
+
+def _polygon_contains(
+    division_id: str,
+    lon: float,
+    lat: float,
+    candidate_bbox: tuple | None = None,
+    geometry_wkb: bytes | None = None,
+) -> bool:
     """True if the division_area polygon for `division_id` contains the point.
 
-    Reads the polygon from the `division_area` S3 partition for the latest
-    release, on demand. Cached per-process via the module-level dict.
+    When `geometry_wkb` is supplied (pre-unioned WKB from a local cache),
+    no S3 I/O is performed — the polygon is decoded from the bytes directly.
+
+    When `geometry_wkb` is absent the function fetches from the `division_area`
+    S3 partition, using STAC-based file selection via `candidate_bbox` to limit
+    the number of Parquet files opened.
+
+    Results are cached per-process by `division_id`.
     """
-    import pyarrow.dataset as ds
-    import pyarrow.fs as _fs
-    import pyarrow.compute as _pc
     import shapely.wkb
 
     cache = _polygon_contains._cache  # type: ignore[attr-defined]
     if division_id in cache:
         poly = cache[division_id]
+    elif geometry_wkb is not None:
+        # Fast path: geometry provided by caller (e.g. from local geom cache).
+        poly = shapely.wkb.loads(geometry_wkb)
+        cache[division_id] = poly
     else:
+        # Fetch from S3, using STAC to restrict which files to open.
+        import pyarrow.dataset as ds
+        import pyarrow.fs as _fs
+        import pyarrow.compute as _pc
+
         release = get_latest_release()
-        path = f"overturemaps-us-west-2/release/{release}/theme=divisions/type=division_area/"
-        fs = _fs.S3FileSystem(anonymous=True, region="us-west-2")
-        dataset = ds.dataset(path, filesystem=fs)
-        filter_expr = _pc.field("division_id") == division_id
+        fs = _fs.S3FileSystem(
+            anonymous=True, region="us-west-2",
+            connect_timeout=30, request_timeout=120,
+        )
+
+        if candidate_bbox is not None:
+            file_paths = _get_division_area_files(release, candidate_bbox)
+        else:
+            file_paths = []
+
+        if file_paths:
+            dataset = ds.dataset(file_paths, filesystem=fs, format="parquet")
+        else:
+            path = (
+                f"overturemaps-us-west-2/release/{release}"
+                "/theme=divisions/type=division_area/"
+            )
+            dataset = ds.dataset(path, filesystem=fs)
+
+        filter_expr = (
+            (_pc.field("division_id") == division_id)
+            & (_pc.field("bbox", "xmin") <= lon)
+            & (_pc.field("bbox", "xmax") >= lon)
+            & (_pc.field("bbox", "ymin") <= lat)
+            & (_pc.field("bbox", "ymax") >= lat)
+        )
         table = dataset.to_table(columns=["geometry"], filter=filter_expr)
         if table.num_rows == 0:
             cache[division_id] = None
             return False
-        # union the polygons (a division can have multiple division_area rows)
         geoms = [shapely.wkb.loads(b) for b in table.column("geometry").to_pylist()]
         from shapely.ops import unary_union
         poly = unary_union(geoms)
@@ -1032,13 +1122,21 @@ def containing(ctx, latlon):
     )
     candidates = table.filter(expr).to_pylist()
 
-    # Confirm via polygon containment
+    # Confirm via polygon containment.
+    # geometry_wkb is present in indexes built with v1.1.0+; absent in older
+    # cached indexes, in which case the S3 fallback path is used.
     matches = [
         c for c in candidates
-        if _polygon_contains(c["id"], lon, lat)
+        if _polygon_contains(
+            c["id"], lon, lat,
+            candidate_bbox=(
+                c["bbox_xmin"], c["bbox_ymin"], c["bbox_xmax"], c["bbox_ymax"]
+            ),
+            geometry_wkb=c.get("geometry_wkb"),
+        )
     ]
-    # Innermost (highest admin_level) first
-    matches.sort(key=lambda c: c["admin_level"], reverse=True)
+    # Innermost (highest admin_level) first; treat None as 0
+    matches.sort(key=lambda c: c["admin_level"] or 0, reverse=True)
 
     payload = [
         {
