@@ -45,6 +45,133 @@ overturemaps --json count -t place --in "Boston, MA" --where categories.primary=
 overturemaps places --in "Boston, MA" --category restaurant -f geojsonseq -o out.jsonl
 ```
 
+## Examples
+
+### Finding POIs
+
+```bash
+# All hospitals in Brooklyn
+overturemaps places --in "Brooklyn" --category hospital -f geojsonseq -o hospitals.jsonl
+
+# Coffee shops in Brooklyn, with high source confidence
+overturemaps places --in "Brooklyn" --category coffee_shop --where confidence>0.8 \
+  -f geojsonseq -o brooklyn_coffee.jsonl
+
+# Hotels in Berlin (using a country code qualifier)
+overturemaps places --in "Berlin, DE" --category hotel -f geojsonseq -o berlin_hotels.jsonl
+
+# Pharmacies near the Empire State Building (~250m)
+overturemaps at 40.7484,-73.9857 -t place --category pharmacy --radius 250 -n 20
+```
+
+### Discovering before downloading
+
+```bash
+# What categories exist in Brooklyn? (cheap; reads only places in the bbox)
+overturemaps categories -t place --in "Brooklyn" --top 30
+
+# How many buildings in Manhattan are at least 100m tall? Decide before downloading.
+overturemaps count -t building --in "Manhattan" --where height>=100
+
+# Peek at five matching features before committing to the full pull
+overturemaps sample -t building --in "Manhattan" --where height>=100 -n 5
+```
+
+### Buildings with attributes
+
+```bash
+# Tall buildings in Manhattan, as GeoParquet for analytics
+overturemaps buildings --in "Manhattan" --where height>150 -f geoparquet -o tall.parquet
+
+# Skyscrapers (≥40 floors) in Chicago
+overturemaps buildings --in "Chicago, IL" --where num_floors>=40 -f geojsonseq -o skyscrapers.jsonl
+
+# Buildings of a specific subtype
+overturemaps buildings --in "Boston, MA" --where subtype=education -f geojsonseq -o schools.jsonl
+```
+
+### Roads and transportation
+
+```bash
+# Highways in Texas
+overturemaps roads --in "Texas, USA" --class motorway -f geojsonseq -o tx_highways.jsonl
+
+# Main roads (primary or secondary) in Berlin
+overturemaps roads --in "Berlin, DE" --where "class in [primary,secondary]" \
+  -f geojsonseq -o berlin_main.jsonl
+
+# Footways and cycleways in central Amsterdam
+overturemaps roads --in "Amsterdam, NL" --where "class in [footway,cycleway]" \
+  -f geojsonseq -o amsterdam_paths.jsonl
+```
+
+### Address lookups
+
+```bash
+# All addresses in a small bbox over Beacon Hill
+overturemaps download -t address --bbox=-71.075,42.355,-71.060,42.365 \
+  -f geojsonseq -o beacon_hill_addresses.jsonl
+
+# Address density in a neighborhood
+overturemaps count -t address --in "Brookline, MA"
+```
+
+### Point queries
+
+```bash
+# What's at a given lat/lon (defaults to nearest POIs)
+overturemaps at 51.5074,-0.1278 -n 5
+
+# Which admin divisions contain this point? (innermost-first)
+overturemaps containing 35.6762,139.6503
+```
+
+### Composing commands
+
+`--json` makes any metadata command pipeable. Use this for ad-hoc workflows or
+when scripting against the CLI.
+
+```bash
+# Resolve a bbox, then download with it
+BBOX=$(overturemaps --json where "Berlin, DE" | jq -r '.bbox | join(",")')
+overturemaps download -t place --bbox "$BBOX" \
+  --where categories.primary=hotel \
+  -f geojsonseq -o berlin_hotels.jsonl
+
+# Top-3 categories in a place, then dump features for each
+for cat in $(overturemaps --json categories -t place --in "Brooklyn" --top 3 | jq -r '.[].value'); do
+  overturemaps places --in "Brooklyn" --category "$cat" \
+    -f geojsonseq -o "brooklyn_${cat}.jsonl"
+done
+
+# Bbox of a country, then count of all roads
+COUNT=$(overturemaps --json count -t segment --in "Iceland" | jq '.count')
+echo "Iceland has $COUNT road segments"
+```
+
+### Multi-step agent workflow
+
+A typical sequence an agent runs when given a layperson question like
+*"how many coffee shops are in Brooklyn?"*:
+
+```bash
+# 1. Confirm the place resolves
+overturemaps --json where "Brooklyn"
+# > {"name": "Brooklyn", "subtype": "locality", "region": "US-NY", "population": 2736074, ...}
+
+# 2. Discover the right category name
+overturemaps --json categories -t place --in "Brooklyn" --top 50 | jq -r '.[].value' | grep -i coffee
+# > coffee_shop
+
+# 3. Count
+overturemaps --json count -t place --in "Brooklyn" --where categories.primary=coffee_shop
+# > {"count": 412, ...}
+
+# 4. Download if needed
+overturemaps places --in "Brooklyn" --category coffee_shop \
+  -f geojsonseq -o brooklyn_coffee.jsonl
+```
+
 ## Usage
 
 #### `download`
@@ -77,39 +204,135 @@ the `--bbox` field here.
 
 #### `where TEXT`
 
-Resolve a place name to a division feature. Returns bbox, subtype, population, hierarchy.
+Resolve a place name to a division feature. Returns the matched division's id,
+subtype, country/region, bbox, population, and parent. `--json` emits a
+candidates array so an ambiguous query can be re-narrowed.
 
-#### `count`, `sample`
+Qualifier syntax: `"Place, ST"`, `"Place, US-ST"`, `"Place, CC"`,
+`"Place, CCC"`, or `"Place, Country Name"` — e.g. all of these resolve to
+Boston, US-MA: `"Boston, MA"`, `"Boston, US-MA"`, `"Boston, US"`,
+`"Boston, USA"`, `"Boston, United States"`.
 
-Cheap previews of any query (`-t TYPE --in PLACE --where FILTER`).
+```bash
+overturemaps where "Boston, MA"
+overturemaps --json where "Walnut Creek, CA, USA" | jq '.bbox'
+overturemaps --json where "Cambridge" | jq '.candidates | length'   # how many Cambridges?
+```
 
-#### `themes`, `types`, `schema`, `categories`, `capabilities`
+Best match is picked by `admin_level` desc (innermost wins) then `population`
+desc; the chosen division is echoed on stderr so an agent can spot a wrong pick.
 
-Introspect what's queryable. `--json` produces machine-readable output.
+#### `count`
+
+Row count for a query without downloading. The cheap preview that should
+precede any `download`.
+
+```bash
+overturemaps count -t place --in "Boston, MA"
+overturemaps --json count -t place --in "Boston, MA" --where categories.primary=restaurant
+```
+
+#### `sample`
+
+Emit the first N features matching a query. Defaults to `geojsonseq` and N=10.
+
+```bash
+overturemaps sample -t building --in "Brooklyn" --where height>100 -n 5
+overturemaps sample -t place --in "Brooklyn" --where categories.primary=coffee_shop -n 3
+```
+
+#### `themes`, `types`, `schema`
+
+Introspect what's queryable.
+
+```bash
+overturemaps themes                       # 6 themes with one-line descriptions
+overturemaps types --theme buildings      # 2 types in this theme
+overturemaps --json schema -t place       # full field list + a sample feature
+```
+
+#### `categories -t place`
+
+Enumerate `categories.primary` values (with counts) for a place-scoped region.
+
+```bash
+overturemaps categories -t place --in "Brooklyn" --top 20
+overturemaps --json categories -t place --in "Manhattan" --top 50 | jq -r '.[] | "\(.count)\t\(.value)"'
+```
+
+#### `capabilities`
+
+Emit a machine-readable manifest of all subcommands with their parameters.
+Agents read this once to learn the CLI surface.
+
+```bash
+overturemaps --json capabilities | jq '.commands[].name'
+```
 
 #### `places`, `buildings`, `roads`
 
-Intent verbs that wrap `download` with a familiar shape:
+Intent verbs that wrap `download` with a familiar shape. `--in` resolves a
+place name, `--category` / `--class` desugar to common `--where` filters, and
+`--where` is still available for advanced predicates.
 
 ```bash
-overturemaps places --in "Brooklyn" --category hospital -f geojsonseq -o out.jsonl
-overturemaps buildings --in "Manhattan" --where height>100 -f geojsonseq -o out.jsonl
-overturemaps roads --in "Texas, US" --class motorway -f geojsonseq -o out.jsonl
+# POIs by category
+overturemaps places --in "Brooklyn" --category hospital -f geojsonseq -o hospitals.jsonl
+
+# Buildings filtered by attribute
+overturemaps buildings --in "Manhattan" --where height>150 -f geojsonseq -o tall.jsonl
+overturemaps buildings --in "Boston, MA" --where num_floors>=10 --where height>30 -f geoparquet -o tall.parquet
+
+# Roads by class
+overturemaps roads --in "Texas, US" --class motorway -f geojsonseq -o tx_highways.jsonl
+overturemaps roads --in "Berlin, DE" --where "class in [primary,secondary]" -f geojsonseq -o berlin_main.jsonl
 ```
 
-#### `at LAT,LON`, `containing LAT,LON`
+#### `at LAT,LON`
 
-Point queries. `at` is nearest-neighbor; `containing` lists admin divisions
-that contain the point.
+Nearest-neighbor lookup at a point. Defaults to `-t place` and `-n 10`. The
+`--radius` (meters) controls how far out to search; per-type defaults are
+100 m for `place`, 50 m for `building`, 25 m for `address`.
+
+```bash
+overturemaps at 40.7484,-73.9857                          # POIs near the Empire State Building
+overturemaps at 37.8270,-122.4230 -t place --category restaurant -n 5
+overturemaps at 51.5074,-0.1278 -t building -n 3
+```
+
+#### `containing LAT,LON`
+
+Which admin divisions contain this point, innermost-first.
+
+```bash
+overturemaps containing 42.3601,-71.0589
+overturemaps --json containing 35.6762,139.6503 | jq -r '.[] | "\(.subtype)\t\(.name)"'
+```
 
 #### `install-skill`
 
 Install the agent-discoverable Skill for Claude Code and/or write an
-`AGENTS.md` section.
+`AGENTS.md` section so coding agents will reach for this CLI when a user's
+question implies geospatial data.
+
+```bash
+overturemaps install-skill                              # interactive
+overturemaps install-skill --target claude-user --yes   # scripted
+overturemaps install-skill --target agents-md --yes     # writes ./AGENTS.md
+```
 
 #### `cache info|clear|build`
 
-Manage the on-disk divisions index (used by `--in` and `containing`).
+The first `--in` or `containing` call builds an on-disk divisions index under
+`$XDG_CACHE_HOME/overturemaps/` (default `~/.cache/overturemaps/`). The index
+is keyed by Overture release and rebuilds automatically when the latest
+release changes; these commands let you inspect or force the lifecycle.
+
+```bash
+overturemaps cache info                # path, current release, up-to-date status
+overturemaps cache build               # force a rebuild against the latest release
+overturemaps cache clear               # remove all cached index files
+```
 
 #### `gers [UUID]`
 
@@ -127,6 +350,36 @@ Command-line options:
 `overturemaps` is also a Python library. Import directly from `overturemaps` to query Overture data
 without using the CLI.
 
+#### Place-name geocoding
+
+`resolve(name)` returns all matching divisions; `best_match(name)` returns the top
+pick. Both read a small on-disk index that builds lazily on first call.
+
+```python
+from overturemaps import best_match, resolve
+
+pick = best_match("Boston, MA")
+print(pick.name, pick.region, pick.bbox)
+# Boston US-MA (-71.19, 42.23, -70.80, 42.40)
+
+# Disambiguate manually
+all_bostons = resolve("Boston")
+for d in all_bostons:
+    print(d.name, d.region, d.population)
+```
+
+#### Counting before downloading
+
+`count_rows` returns the row count for a query without streaming data.
+
+```python
+from overturemaps import best_match, count_rows
+
+division = best_match("Brooklyn")
+n = count_rows("place", bbox=division.bbox, stac=True)
+print(f"Brooklyn has {n:,} places")
+```
+
 #### Arrow / pyarrow
 
 `record_batch_reader` returns a `pyarrow.RecordBatchReader` — a streaming cursor over the data.
@@ -143,15 +396,29 @@ if reader is not None:
     print(table.schema)
 ```
 
+`record_batch_reader` also accepts attribute filters that push down to PyArrow.
+Build them by parsing CLI-style expressions or constructing `ParsedFilter`
+instances directly:
+
+```python
+from overturemaps import record_batch_reader, best_match
+from overturemaps.filters import parse_where_expr
+
+bbox = best_match("Manhattan").bbox
+filters = [parse_where_expr("height>100"), parse_where_expr("num_floors>=10")]
+reader = record_batch_reader("building", bbox=bbox, where_filters=filters, stac=True)
+table = reader.read_all()
+```
+
 #### GeoDataFrame (geopandas)
 
 `geodataframe` loads data directly into a `geopandas.GeoDataFrame`. Requires `geopandas` to be
 installed (`pip install overturemaps[geopandas]` or `pip install geopandas`).
 
 ```python
-from overturemaps import geodataframe
+from overturemaps import geodataframe, best_match
 
-bbox = (-71.068, 42.353, -71.058, 42.363)
+bbox = best_match("Boston, MA").bbox
 gdf = geodataframe("building", bbox=bbox)
 print(gdf.head())
 ```

@@ -1,6 +1,6 @@
 ---
 name: overturemaps
-description: Use when a user's question or task involves places, buildings, roads, addresses, neighborhoods, or other geographic features — even if they don't use geo terms. Examples: "how many coffee shops in SoHo", "find hospitals in Brooklyn", "show tall buildings in Manhattan", "what neighborhoods make up Queens", "what's the bounding box for Tokyo".
+description: Use when a user's question or task involves places, buildings, roads, addresses, neighborhoods, or other geographic features — even if they don't use geo terms. Examples: "how many coffee shops in Brooklyn", "find hospitals in Manhattan", "show tall buildings in Chicago", "what are the main roads in Berlin", "what's the bounding box of Boston".
 ---
 
 # Overture Maps CLI
@@ -14,13 +14,22 @@ or a kind of feature on the map — even when they don't use geo terminology.
 
 Triggering phrases (illustrative, not exhaustive):
 
-- *"How many coffee shops are in SoHo?"* → `where` + `count -t place --where categories.primary=coffee_shop`
-- *"Find hospitals in Brooklyn"* → `places --in "Brooklyn" --category hospital`
-- *"Show buildings taller than 100m in Manhattan"* → `buildings --in "Manhattan" --where height>100`
-- *"What highways run through Texas?"* → `roads --in "Texas, US" --class motorway`
-- *"What neighborhood is this address in?"* → `containing LAT,LON`
+- *"How many coffee shops are in Brooklyn?"* → `where` + `count -t place --in Brooklyn --where categories.primary=coffee_shop`
+- *"Find hospitals in Manhattan"* → `places --in "Manhattan" --category hospital`
+- *"Show buildings taller than 100m in Chicago"* → `buildings --in "Chicago, IL" --where height>100`
+- *"What highways run through Texas?"* → `roads --in "Texas, USA" --class motorway`
+- *"What admin area is this address in?"* → `containing LAT,LON`
 - *"What's at 40.7128, -74.0060?"* → `at 40.7128,-74.0060`
 - *"What's the bounding box of Boston?"* → `where "Boston, MA" --json`
+
+**Note on place names:** Overture's divisions index stores `name_primary` in
+the local script (e.g. Tokyo is `東京都`, not `Tokyo`). For non-Latin cities,
+prefer the local-script form, use `containing LAT,LON` with coordinates, or
+fall back to `--bbox`. The `where` command's qualifier syntax is
+`"Place, ST"`, `"Place, US-ST"`, `"Place, CC"` (alpha-2), `"Place, CCC"`
+(alpha-3), or `"Place, Country Name"` — e.g. all of these resolve Boston:
+`"Boston, MA"`, `"Boston, US-MA"`, `"Boston, US"`, `"Boston, USA"`,
+`"Boston, United States"`.
 
 Negative examples (do NOT reach for overturemaps):
 
@@ -43,9 +52,9 @@ overturemaps --json where "Boston, MA"
 
 ### 2. Count before downloading (always check first)
 ```bash
-overturemaps --json count -t building --in "Tokyo"
-# {"count": 8_754_321, ...}
-# That's too many. Add filters or pick a smaller place.
+overturemaps --json count -t building --in "Manhattan"
+# {"count": 50000+, ...}
+# Add filters to narrow if the count is too large.
 ```
 
 ### 3. Sample to confirm shape before committing
@@ -55,7 +64,7 @@ overturemaps sample -t place --in "Boston, MA" --where categories.primary=restau
 
 ### 4. POIs by category
 ```bash
-overturemaps places --in "SoHo, US-NY" --category cafe \
+overturemaps places --in "Brooklyn" --category cafe \
   -f geojsonseq -o cafes.jsonl
 ```
 
@@ -142,7 +151,11 @@ type's schema. Multiple `--where` flags AND together.
 - **Prefer `--where` over post-filtering.** Filters push down to PyArrow and
   Parquet metadata; post-filtering GeoJSON is wasteful.
 - **Don't invent place names.** If `where` returns no match, the place isn't
-  in Overture's divisions. Try a parent (city → state → country).
+  in Overture's divisions. Try a parent (city → state → country). For
+  non-English cities, the local-script form is often the canonical name
+  (e.g. `東京都` for Tokyo). For neighborhoods that don't resolve at all
+  (many US neighborhoods like SoHo, Greenwich Village, Chelsea are not in
+  the divisions data), fall back to the parent locality or use `--bbox`.
 - **Don't parse human stdout.** Use `--json` for metadata commands. Data
   commands always emit structured GeoJSON / GeoParquet.
 - **Don't ignore the `--in` warning on stderr.** It tells you which Boston
