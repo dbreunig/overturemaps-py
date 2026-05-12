@@ -39,9 +39,18 @@ from .cache import cache_info, clear_cache, build_index, index_path
 from . import skill_installer
 
 
+def _json_default(value):
+    """Fallback serializer for orjson — hex-encode raw bytes."""
+    if isinstance(value, (bytes, bytearray)):
+        return value.hex()
+    raise TypeError(f"Type is not JSON serializable: {type(value).__name__}")
+
+
 def _emit_json(ctx, payload, file=None):
     """Print one JSON document to stdout."""
-    out = orjson.dumps(payload, option=orjson.OPT_INDENT_2).decode()
+    out = orjson.dumps(
+        payload, default=_json_default, option=orjson.OPT_INDENT_2
+    ).decode()
     click.echo(out, file=file)
 
 
@@ -624,6 +633,16 @@ def schema(ctx, type_, release):
     except StopIteration:
         pass
 
+    if sample is not None and isinstance(sample.get("geometry"), (bytes, bytearray)):
+        # Convert WKB to a GeoJSON geometry dict so agents can read it.
+        try:
+            import shapely
+            import shapely.wkb
+            geom = shapely.wkb.loads(sample["geometry"])
+            sample["geometry"] = orjson.loads(shapely.to_geojson(geom))
+        except Exception:
+            sample["geometry"] = sample["geometry"].hex()
+
     fields = flatten_schema(reader.schema)
     payload = {
         "type": type_,
@@ -641,7 +660,11 @@ def schema(ctx, type_, release):
     click.echo()
     if sample is not None:
         click.secho("Example feature:", bold=True)
-        click.echo(orjson.dumps(sample, option=orjson.OPT_INDENT_2).decode())
+        click.echo(
+            orjson.dumps(
+                sample, default=_json_default, option=orjson.OPT_INDENT_2
+            ).decode()
+        )
 
 
 @cli.command()
