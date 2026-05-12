@@ -12,22 +12,31 @@ from overturemaps.geocoding import resolve, best_match, Division
 def _build_index_file(tmp_path: Path) -> Path:
     """Write a tiny fake divisions index parquet at the expected location."""
     table = pa.table({
-        "id": ["us", "ma", "boston-ma", "boston-uk", "cambridge-ma", "cambridge-uk"],
+        "id": [
+            "us", "ma", "boston-ma", "boston-uk", "cambridge-ma", "cambridge-uk",
+            "walnut-creek-ca",
+        ],
         "name_primary": [
             "United States", "Massachusetts", "Boston", "Boston",
             "Cambridge", "Cambridge",
+            "Walnut Creek",
         ],
-        "subtype": ["country", "region", "locality", "locality", "locality", "locality"],
-        "class": [None, None, None, None, None, None],
-        "country": ["US", "US", "US", "GB", "US", "GB"],
-        "region": [None, "US-MA", "US-MA", "GB-LIN", "US-MA", "GB-CAM"],
-        "admin_level": [2, 4, 8, 8, 8, 8],
-        "population": [330000000, 7000000, 654776, 41000, 118000, 145000],
-        "parent_division_id": [None, "us", "ma", "lincolnshire", "ma", "cambridgeshire"],
-        "bbox_xmin": [-180.0, -73.5, -71.19, 0.00, -71.16, 0.10],
-        "bbox_ymin": [18.0, 41.2, 42.23, 53.00, 42.36, 52.18],
-        "bbox_xmax": [-66.0, -69.9, -70.99, 0.20, -71.07, 0.20],
-        "bbox_ymax": [71.0, 42.9, 42.40, 53.10, 42.42, 52.22],
+        "subtype": [
+            "country", "region", "locality", "locality", "locality", "locality",
+            "locality",
+        ],
+        "class": [None, None, None, None, None, None, None],
+        "country": ["US", "US", "US", "GB", "US", "GB", "US"],
+        "region": [None, "US-MA", "US-MA", "GB-LIN", "US-MA", "GB-CAM", "US-CA"],
+        "admin_level": [2, 4, 8, 8, 8, 8, 8],
+        "population": [330000000, 7000000, 654776, 41000, 118000, 145000, 70000],
+        "parent_division_id": [
+            None, "us", "ma", "lincolnshire", "ma", "cambridgeshire", "ca",
+        ],
+        "bbox_xmin": [-180.0, -73.5, -71.19, 0.00, -71.16, 0.10, -122.10],
+        "bbox_ymin": [18.0, 41.2, 42.23, 53.00, 42.36, 52.18, 37.86],
+        "bbox_xmax": [-66.0, -69.9, -70.99, 0.20, -71.07, 0.20, -121.97],
+        "bbox_ymax": [71.0, 42.9, 42.40, 53.10, 42.42, 52.22, 37.94],
     })
     out = tmp_path / "overturemaps" / "divisions-index-2025-12-17.0.parquet"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -111,3 +120,28 @@ def test_best_match_short_region_qualifier(fake_index):
     pick_short = best_match("Boston, MA")
     pick_full = best_match("Boston, US-MA")
     assert pick_short.id == pick_full.id
+
+
+def test_best_match_country_alpha3_alias(fake_index):
+    """'Walnut Creek, CA, USA' should map USA -> US."""
+    pick = best_match("Walnut Creek, CA, USA")
+    assert pick.region == "US-CA"
+    assert pick.country == "US"
+
+
+def test_best_match_country_full_name(fake_index):
+    """Full country names like 'United States' should normalize."""
+    pick = best_match("Walnut Creek, CA, United States")
+    assert pick.region == "US-CA"
+
+
+def test_best_match_country_uk_alias(fake_index):
+    """'UK' should map to 'GB'."""
+    pick = best_match("Boston, UK")
+    assert pick.region == "GB-LIN"
+
+
+def test_best_match_unknown_qualifier_rejects(fake_index):
+    """An unknown qualifier should still narrow (and reject) — not be silently dropped."""
+    with pytest.raises(LookupError):
+        best_match("Boston, ZZ")
