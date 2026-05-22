@@ -146,12 +146,24 @@ def resolve(query: str) -> List[Division]:
     if filtered.num_rows == 0:
         return []
 
-    # Sort: admin_level desc (innermost first) then population desc
+    # Sort: prefer rows with a known population (real places people search
+    # for), then larger population, then innermost admin_level as a final
+    # tiebreaker. admin_level is mostly null in this index, so making it
+    # the primary key (the old behavior) caused tiny administrative areas
+    # to outrank major cities — e.g., the Saskatchewan "Alameda" county
+    # outranked Alameda, CA. Population is the more reliable signal.
+    filtered = filtered.append_column(
+        "_has_pop", pc.is_valid(filtered.column("population"))
+    )
     sort_indices = pc.sort_indices(
         filtered,
-        sort_keys=[("admin_level", "descending"), ("population", "descending")],
+        sort_keys=[
+            ("_has_pop", "descending"),
+            ("population", "descending"),
+            ("admin_level", "descending"),
+        ],
     )
-    filtered = filtered.take(sort_indices)
+    filtered = filtered.take(sort_indices).drop_columns(["_has_pop"])
 
     rows = filtered.to_pylist()
     return [

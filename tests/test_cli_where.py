@@ -9,23 +9,22 @@ from overturemaps.cli import cli
 from overturemaps.geocoding import Division
 
 
+_BOSTON = Division(
+    id="boston-ma", name="Boston", subtype="locality",
+    country="US", region="US-MA",
+    admin_level=8, population=654776, parent_division_id="ma",
+    bbox=(-71.19, 42.23, -70.99, 42.40),
+)
+
+
 @pytest.fixture
 def fake_match(monkeypatch):
     captured = {}
 
-    def fake(query):
-        captured["query"] = query
-        return Division(
-            id="boston-ma", name="Boston", subtype="locality",
-            country="US", region="US-MA",
-            admin_level=8, population=654776, parent_division_id="ma",
-            bbox=(-71.19, 42.23, -70.99, 42.40),
-        )
-
     def fake_resolve(query):
-        return [fake(query)]
+        captured["query"] = query
+        return [_BOSTON]
 
-    monkeypatch.setattr("overturemaps.cli.best_match", fake)
     monkeypatch.setattr("overturemaps.cli.resolve", fake_resolve)
     return captured
 
@@ -51,23 +50,71 @@ def test_where_json_output(fake_match):
 
 
 def test_where_no_match(monkeypatch):
-    monkeypatch.setattr(
-        "overturemaps.cli.best_match",
-        lambda q: (_ for _ in ()).throw(LookupError(f"No match for {q!r}")),
-    )
+    monkeypatch.setattr("overturemaps.cli.resolve", lambda q: [])
     runner = CliRunner()
     result = runner.invoke(cli, ["where", "Nonexistentville"])
     assert result.exit_code != 0
 
 
 def test_where_no_match_json(monkeypatch):
-    monkeypatch.setattr(
-        "overturemaps.cli.best_match",
-        lambda q: (_ for _ in ()).throw(LookupError(f"No match for {q!r}")),
-    )
+    monkeypatch.setattr("overturemaps.cli.resolve", lambda q: [])
     runner = CliRunner()
     result = runner.invoke(cli, ["--json", "where", "Nonexistentville"])
     assert result.exit_code != 0
-    # JSON error is printed to stderr by Click's invoke (mixed in result.output by default)
     combined = result.output + (result.stderr if hasattr(result, "stderr") else "")
     assert "no_match" in combined or "No match" in combined
+
+
+def test_where_ambiguous_shows_hint(monkeypatch):
+    """When multiple matches exist, the human view hints at --all."""
+    alameda_ca = Division(
+        id="alameda-ca", name="Alameda", subtype="locality",
+        country="US", region="US-CA",
+        admin_level=8, population=78280, parent_division_id=None,
+        bbox=(-122.34, 37.71, -122.21, 37.79),
+    )
+    alameda_sk = Division(
+        id="alameda-sk", name="Alameda", subtype="region",
+        country="CA", region="CA-SK",
+        admin_level=4, population=None, parent_division_id=None,
+        bbox=(-102.3, 49.2, -102.2, 49.3),
+    )
+    monkeypatch.setattr(
+        "overturemaps.cli.resolve",
+        lambda q: [alameda_ca, alameda_sk],
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli, ["where", "Alameda, CA"])
+    assert result.exit_code == 0
+    assert "Alameda" in result.output
+    assert "US-CA" in result.output
+    assert "--all" in result.output  # hint to disambiguate
+    # By default only the first match is shown in detail
+    assert "CA-SK" not in result.output
+
+
+def test_where_all_lists_every_match(monkeypatch):
+    """`where --all` shows every candidate."""
+    alameda_ca = Division(
+        id="alameda-ca", name="Alameda", subtype="locality",
+        country="US", region="US-CA",
+        admin_level=8, population=78280, parent_division_id=None,
+        bbox=(-122.34, 37.71, -122.21, 37.79),
+    )
+    alameda_sk = Division(
+        id="alameda-sk", name="Alameda", subtype="region",
+        country="CA", region="CA-SK",
+        admin_level=4, population=None, parent_division_id=None,
+        bbox=(-102.3, 49.2, -102.2, 49.3),
+    )
+    monkeypatch.setattr(
+        "overturemaps.cli.resolve",
+        lambda q: [alameda_ca, alameda_sk],
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli, ["where", "Alameda, CA", "--all"])
+    assert result.exit_code == 0
+    assert "[1]" in result.output
+    assert "[2]" in result.output
+    assert "US-CA" in result.output
+    assert "CA-SK" in result.output

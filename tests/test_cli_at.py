@@ -61,3 +61,50 @@ def test_at_sorts_by_distance(monkeypatch, tmp_path):
         # First line should be the nearest feature
         assert '"id":"p_near"' in lines[0]
         assert '"id":"p_mid"' in lines[1]
+
+
+def test_at_passes_where_filters(monkeypatch, tmp_path):
+    """`at --where` should parse expressions and forward them to the reader."""
+    captured = {}
+
+    def fake_reader(type_, bbox, *a, where_filters=None, **k):
+        captured["type"] = type_
+        captured["bbox"] = bbox
+        captured["where_filters"] = where_filters
+        return _features_reader([])
+
+    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+                        lambda: "2025-12-17.0")
+    monkeypatch.setattr("overturemaps.cli.record_batch_reader", fake_reader)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, [
+            "at", "42.360,-71.0617", "-t", "place", "-n", "5",
+            "--where", "categories.primary=coffee_shop",
+            "-f", "geojsonseq", "-o", "out.jsonl",
+        ])
+        assert result.exit_code == 0, result.output
+        assert captured["type"] == "place"
+        assert captured["where_filters"] is not None
+        assert len(captured["where_filters"]) == 1
+        f = captured["where_filters"][0]
+        assert f.key == "categories.primary"
+        assert f.op == "="
+        assert f.value == "coffee_shop"
+
+
+def test_at_invalid_where_errors(monkeypatch):
+    """`at --where` with an invalid expression should fail cleanly."""
+    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+                        lambda: "2025-12-17.0")
+    monkeypatch.setattr("overturemaps.cli.record_batch_reader",
+                        lambda *a, **k: _features_reader([]))
+
+    runner = CliRunner()
+    result = runner.invoke(cli, [
+        "at", "42.360,-71.0617",
+        "--where", "this is not a filter",
+        "-f", "geojsonseq",
+    ])
+    assert result.exit_code != 0

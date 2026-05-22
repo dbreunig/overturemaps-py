@@ -46,13 +46,13 @@ def test_count_with_in_and_where(monkeypatch):
     monkeypatch.setattr("overturemaps.cli.get_latest_release",
                         lambda: "2025-12-17.0")
     monkeypatch.setattr(
-        "overturemaps.cli.best_match",
-        lambda q: Division(
+        "overturemaps.cli.resolve",
+        lambda q: [Division(
             id="x", name="Boston", subtype="locality",
             country="US", region="US-MA",
             admin_level=8, population=654776, parent_division_id=None,
             bbox=(-71.2, 42.2, -71.0, 42.4),
-        ),
+        )],
     )
 
     def fake_count(type_, bbox=None, release=None, **kwargs):

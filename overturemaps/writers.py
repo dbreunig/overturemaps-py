@@ -58,8 +58,14 @@ def get_writer(output_format, path, schema):
 
 
 def copy(reader, writer):
+    # disable=None auto-suppresses tqdm when stderr is not a TTY (piped,
+    # captured to a log, redirected via 2>&1). Prevents progress chatter
+    # from polluting downstream parsers and stops \r-based redraw spam
+    # when stderr is a regular file.
+    rows_written = 0
     with tqdm(
-        total=None, unit=" rows", desc="Downloading", file=sys.stderr, colour="blue"
+        total=None, unit=" rows", desc="Downloading",
+        file=sys.stderr, colour="blue", disable=None,
     ) as bar:
         while True:
             try:
@@ -69,6 +75,8 @@ def copy(reader, writer):
             if batch.num_rows > 0:
                 writer.write_batch(batch)
                 bar.update(batch.num_rows)
+                rows_written += batch.num_rows
+    return rows_written
 
 
 class BaseGeoJSONWriter:

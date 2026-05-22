@@ -108,13 +108,28 @@ overturemaps roads --in "Amsterdam, NL" --where "class in [footway,cycleway]" \
 ### Address lookups
 
 ```bash
-# All addresses in a small bbox over Beacon Hill
-overturemaps download -t address --bbox=-71.075,42.355,-71.060,42.365 \
+# Find a specific address (case-insensitive substring on street;
+# --number / --postcode are exact). --in or --bbox is required.
+overturemaps addresses --in "Alameda, US-CA" \
+  --street Fountain --number 1208
+
+# All "Main St" addresses in a city
+overturemaps addresses --in "Brookline, MA" --street "Main St"
+
+# All addresses inside a small bbox over Beacon Hill
+overturemaps addresses --bbox=-71.075,42.355,-71.060,42.365 \
   -f geojsonseq -o beacon_hill_addresses.jsonl
 
 # Address density in a neighborhood
 overturemaps count -t address --in "Brookline, MA"
 ```
+
+The `addresses` command requires `--in` or `--bbox` so queries stay
+bounded — the global address dataset is too large to scan unfiltered.
+`--street` is a case-insensitive substring match (so `Fountain` will
+match `Fountain St`, `Fountain Avenue`, and `E Fountain Blvd`).
+Overture's address coverage is uneven; if a known address returns no
+rows, the data simply isn't there for that area yet.
 
 ### Point queries
 
@@ -215,12 +230,22 @@ Boston, US-MA: `"Boston, MA"`, `"Boston, US-MA"`, `"Boston, US"`,
 
 ```bash
 overturemaps where "Boston, MA"
+overturemaps where "Alameda, CA" --all              # list every candidate
 overturemaps --json where "Walnut Creek, CA, USA" | jq '.bbox'
 overturemaps --json where "Cambridge" | jq '.candidates | length'   # how many Cambridges?
 ```
 
-Best match is picked by `admin_level` desc (innermost wins) then `population`
-desc; the chosen division is echoed on stderr so an agent can spot a wrong pick.
+Best match is picked by:
+1. presence of population data (real places people search for outrank
+   thinly-documented administrative areas),
+2. higher population,
+3. innermost `admin_level` as a final tiebreaker.
+
+When more than one candidate matches, every data command (`places`,
+`buildings`, `roads`, `addresses`, `count`, `sample`, …) prints a one-line
+stderr warning naming the picked division and the top alternative, pointing
+at `where --all` for full inspection. Do not silence stderr — that warning
+is the only signal that the resolver made a judgment call.
 
 #### `count`
 
@@ -269,15 +294,19 @@ Agents read this once to learn the CLI surface.
 overturemaps --json capabilities | jq '.commands[].name'
 ```
 
-#### `places`, `buildings`, `roads`
+#### `places`, `buildings`, `roads`, `addresses`
 
-Intent verbs that wrap `download` with a familiar shape. `--in` resolves a
-place name, `--category` / `--class` desugar to common `--where` filters, and
-`--where` is still available for advanced predicates.
+Intent verbs that wrap `download` with a familiar shape. Each accepts either
+`--in "Place Name"` (resolved via the divisions index) or `--bbox xmin,ymin,xmax,ymax`.
+`--category` / `--class` / `--street` desugar to common `--where` filters,
+and `--where` is still available for advanced predicates.
 
 ```bash
-# POIs by category
+# POIs by category (named place)
 overturemaps places --in "Brooklyn" --category hospital -f geojsonseq -o hospitals.jsonl
+
+# POIs by category (manual bbox — skip the named-place lookup)
+overturemaps places --bbox=-122.295,37.778,-122.265,37.800 --category coffee_shop
 
 # Buildings filtered by attribute
 overturemaps buildings --in "Manhattan" --where height>150 -f geojsonseq -o tall.jsonl
@@ -286,19 +315,46 @@ overturemaps buildings --in "Boston, MA" --where num_floors>=10 --where height>3
 # Roads by class
 overturemaps roads --in "Texas, US" --class motorway -f geojsonseq -o tx_highways.jsonl
 overturemaps roads --in "Berlin, DE" --where "class in [primary,secondary]" -f geojsonseq -o berlin_main.jsonl
+
+# Addresses by street (case-insensitive substring on --street; --number / --postcode are exact)
+overturemaps addresses --in "Alameda, US-CA" --street Fountain --number 1234
+overturemaps addresses --in "Brookline, MA" --street "Main St"
 ```
+
+`places` includes a zero-result hint: when `--category X` (or
+`--where categories.primary=X`) returns 0 rows AND that value isn't
+present in the bbox, the CLI scans the bbox once for the live category
+list and emits a stderr suggestion of up to 3 near-matches drawn from
+what's actually there. So `--category ferry_terminal` in a bbox where
+only `ferry_boat_company` exists yields:
+
+```
+[overturemaps] 0 rows. No place has categories.primary='ferry_terminal' in
+this bbox. Did you mean: ferry_boat_company? Run `overturemaps categories
+-t place --bbox …` to see the full list.
+```
+
+This means agents typically don't need to round-trip through `categories`
+themselves; the hint surfaces the right value automatically.
 
 #### `at LAT,LON`
 
 Nearest-neighbor lookup at a point. Defaults to `-t place` and `-n 10`. The
 `--radius` (meters) controls how far out to search; per-type defaults are
-100 m for `place`, 50 m for `building`, 25 m for `address`.
+100 m for `place`, 50 m for `building`, 25 m for `address`. `--where`
+filters apply just like the intent verbs, so this is the right command for
+"X near a point."
 
 ```bash
 overturemaps at 40.7484,-73.9857                          # POIs near the Empire State Building
-overturemaps at 37.8270,-122.4230 -t place --category restaurant -n 5
+overturemaps at 37.8270,-122.4230 -t place \
+  --radius 1500 --where "categories.primary=restaurant" -n 5
 overturemaps at 51.5074,-0.1278 -t building -n 3
 ```
+
+Use `at … --where …` instead of constructing a manual bbox + `download`.
+It's the dedicated proximity primitive and returns features sorted by
+distance.
 
 #### `containing LAT,LON`
 

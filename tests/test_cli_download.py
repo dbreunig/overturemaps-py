@@ -263,16 +263,16 @@ def test_download_with_in_flag_resolves_to_bbox(monkeypatch):
 
     captured = {}
 
-    def fake_best_match(query):
+    def fake_resolve(query):
         captured["query"] = query
-        return Division(
+        return [Division(
             id="boston-ma", name="Boston", subtype="locality",
             country="US", region="US-MA",
             admin_level=8, population=654776, parent_division_id="ma",
             bbox=(-71.19, 42.23, -70.99, 42.40),
-        )
+        )]
 
-    monkeypatch.setattr("overturemaps.cli.best_match", fake_best_match)
+    monkeypatch.setattr("overturemaps.cli.resolve", fake_resolve)
     monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2025-12-17.0")
 
     def fake_reader(type_, bbox, *args, **kwargs):

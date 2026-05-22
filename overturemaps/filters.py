@@ -16,7 +16,10 @@ _OPERATORS = ["<=", ">=", "!=", " in ", "=", "<", ">"]
 @dataclass(frozen=True)
 class ParsedFilter:
     key: str
-    op: str  # one of: =, !=, <, <=, >, >=, in
+    # User-facing ops from --where: =, !=, <, <=, >, >=, in
+    # Internal ops synthesized by subcommands (not parsed from --where):
+    #   ~ : case-insensitive substring match (used by `addresses --street`)
+    op: str
     value: Any  # str | int | float | bool | list
 
     def to_pyarrow_expression(self, schema: pa.Schema) -> pc.Expression:
@@ -39,6 +42,8 @@ class ParsedFilter:
             return field_ref >= self.value
         if self.op == "in":
             return field_ref.isin(self.value)
+        if self.op == "~":
+            return pc.match_substring(field_ref, self.value, ignore_case=True)
         raise ValueError(f"Unsupported operator: {self.op!r}")
 
     def validate_against_schema(self, schema: pa.Schema) -> None:

@@ -34,7 +34,7 @@ from .releases import list_releases, release_exists
 from .state import get_state_path, load_state, save_state
 from .writers import copy, get_writer
 from .filters import parse_where_expr, ParsedFilter
-from .geocoding import best_match, resolve
+from .geocoding import resolve
 from .cache import cache_info, clear_cache, build_index, index_path
 from . import skill_installer
 
@@ -58,6 +58,93 @@ def _emit_error_json(message, code="error"):
     """Print a JSON error envelope to stderr."""
     err = {"error": {"code": code, "message": message}}
     click.echo(orjson.dumps(err).decode(), err=True)
+
+
+def _describe_division(d) -> str:
+    """One-line label like 'Alameda (locality, US-CA, pop 78,280)'."""
+    qual = d.region or d.country or "?"
+    pop = f"pop {d.population:,}" if d.population is not None else "pop ?"
+    return f"{d.name} ({d.subtype}, {qual}, {pop})"
+
+
+def _suggest_categories(type_: str, bbox, release, target: str, n: int = 3):
+    """Scan `bbox` for `categories.primary` values and return up to `n`
+    closest matches to `target`. Used to power 0-result hints — only call
+    on the failure path, since this issues a second scan of the bbox.
+
+    Ranking is token-aware: `ferry_terminal` should match `ferry_service`
+    via the shared "ferry" token, not `cafeteria` via character overlap.
+    """
+    reader = record_batch_reader(type_, bbox, release, None, None, True)
+    if reader is None:
+        return []
+    seen: set[str] = set()
+    while True:
+        try:
+            batch = reader.read_next_batch()
+        except StopIteration:
+            break
+        if batch.num_rows == 0:
+            continue
+        cat_col = batch.column("categories")
+        primary = pc.struct_field(cat_col, "primary").to_pylist()
+        for v in primary:
+            if v is not None:
+                seen.add(v)
+    if not seen:
+        return []
+
+    import difflib
+    target_lower = target.lower()
+    target_tokens = set(target_lower.replace("_", " ").split())
+    matcher = difflib.SequenceMatcher(autojunk=False)
+    matcher.set_seq1(target_lower)
+
+    # Inclusion rules (any one passes):
+    #   - token overlap >= 1  → "ferry_terminal" ~ "ferry_service"
+    #   - substring          → "cafe" ~ "cafeteria"
+    #   - ratio >= 0.75      → typo correction ("coffe_shop" ~ "coffee_shop")
+    # Anything weaker is noise (e.g. cafeteria ~ ferry_terminal at 0.609).
+    scored = []
+    for v in seen:
+        v_lower = v.lower()
+        matcher.set_seq2(v_lower)
+        ratio = matcher.ratio()
+        v_tokens = set(v_lower.replace("_", " ").split())
+        token_overlap = len(target_tokens & v_tokens)
+        substring_hit = int(target_lower in v_lower or v_lower in target_lower)
+        if token_overlap or substring_hit or ratio >= 0.75:
+            score = ratio + 0.2 * token_overlap + 0.15 * substring_hit
+            scored.append((score, v))
+    if not scored:
+        return []
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [v for _, v in scored[:n]]
+
+
+def _resolve_in_place(in_place: str):
+    """Resolve a --in query to a Division, warning to stderr on ambiguity.
+
+    - Raises click.UsageError if no division matches.
+    - On multiple matches, prints a one-line stderr warning naming the
+      picked division and the top alternative. Returns the picked one.
+    - Silent on a single match.
+    """
+    matches = resolve(in_place)
+    if not matches:
+        raise click.UsageError(f"No division found for {in_place!r}")
+    picked = matches[0]
+    if len(matches) > 1:
+        alt = matches[1]
+        more = f" (+{len(matches) - 2} more)" if len(matches) > 2 else ""
+        click.secho(
+            f"[overturemaps] Ambiguous --in {in_place!r}: picked "
+            f"{_describe_division(picked)} over "
+            f"{_describe_division(alt)}{more}. "
+            f"Run `overturemaps where {in_place!r} --all` to see all.",
+            fg="yellow", err=True,
+        )
+    return picked
 
 
 def _limit_reader(reader, n):
@@ -288,10 +375,7 @@ def download(
 
     # Resolve --in to bbox
     if in_place is not None:
-        try:
-            division = best_match(in_place)
-        except LookupError as e:
-            raise click.UsageError(str(e))
+        division = _resolve_in_place(in_place)
         bbox = list(division.bbox)
         click.secho(
             f"Resolved {in_place!r} -> {division.name} "
@@ -448,35 +532,51 @@ def gers(ctx, gers_id, output_format, output, connect_timeout, request_timeout):
 
 @cli.command()
 @click.argument("query", type=str)
+@click.option("--all", "show_all", is_flag=True, default=False,
+              help="Show all matching divisions, not just the best one.")
 @click.pass_context
-def where(ctx, query):
+def where(ctx, query, show_all):
     """Resolve a place name to an Overture division feature."""
     json_mode = ctx.obj.get("json", False)
-    try:
-        pick = best_match(query)
-    except LookupError as e:
+    matches = resolve(query)
+    if not matches:
+        msg = f"No division found for {query!r}"
         if json_mode:
-            _emit_error_json(str(e), code="no_match")
+            _emit_error_json(msg, code="no_match")
         else:
-            click.secho(str(e), fg="red", err=True)
+            click.secho(msg, fg="red", err=True)
         ctx.exit(1)
+    pick = matches[0]
 
     if json_mode:
-        all_matches = resolve(query)
         payload = pick.as_dict()
-        payload["candidates"] = [d.as_dict() for d in all_matches]
+        payload["candidates"] = [d.as_dict() for d in matches]
         _emit_json(ctx, payload)
         return
 
     # Human output
-    region_or_country = pick.region or pick.country or "?"
-    click.secho(f"{pick.name}, {region_or_country}", bold=True)
-    click.echo(f"  subtype: {pick.subtype}")
-    click.echo(f"  bbox: {pick.bbox[0]:.4f}, {pick.bbox[1]:.4f}, "
-               f"{pick.bbox[2]:.4f}, {pick.bbox[3]:.4f}")
-    if pick.population is not None:
-        click.echo(f"  population: {pick.population:,}")
-    click.echo(f"  id: {pick.id}")
+    def _print_one(d, prefix=""):
+        qual = d.region or d.country or "?"
+        click.secho(f"{prefix}{d.name}, {qual}", bold=True)
+        click.echo(f"  subtype: {d.subtype}")
+        click.echo(f"  bbox: {d.bbox[0]:.4f}, {d.bbox[1]:.4f}, "
+                   f"{d.bbox[2]:.4f}, {d.bbox[3]:.4f}")
+        if d.population is not None:
+            click.echo(f"  population: {d.population:,}")
+        click.echo(f"  id: {d.id}")
+
+    if show_all:
+        for i, d in enumerate(matches, start=1):
+            _print_one(d, prefix=f"[{i}] ")
+    else:
+        _print_one(pick)
+        if len(matches) > 1:
+            click.secho(
+                f"\n  ({len(matches) - 1} other match"
+                f"{'es' if len(matches) - 1 != 1 else ''}; "
+                f"rerun with --all to see them.)",
+                fg="yellow",
+            )
 
 
 @cli.command()
@@ -493,10 +593,7 @@ def count(ctx, type_, bbox, in_place, where_exprs, release):
     if bbox is not None and in_place is not None:
         raise click.UsageError("--bbox and --in are mutually exclusive")
     if in_place is not None:
-        try:
-            division = best_match(in_place)
-        except LookupError as e:
-            raise click.UsageError(str(e))
+        division = _resolve_in_place(in_place)
         bbox = list(division.bbox)
 
     try:
@@ -541,10 +638,7 @@ def sample(type_, bbox, in_place, where_exprs, n, output_format, output, release
     if bbox is not None and in_place is not None:
         raise click.UsageError("--bbox and --in are mutually exclusive")
     if in_place is not None:
-        try:
-            division = best_match(in_place)
-        except LookupError as e:
-            raise click.UsageError(str(e))
+        division = _resolve_in_place(in_place)
         bbox = list(division.bbox)
 
     try:
@@ -682,10 +776,7 @@ def categories(ctx, type_, bbox, in_place, top, release):
     if bbox is not None and in_place is not None:
         raise click.UsageError("--bbox and --in are mutually exclusive")
     if in_place is not None:
-        try:
-            division = best_match(in_place)
-        except LookupError as e:
-            raise click.UsageError(str(e))
+        division = _resolve_in_place(in_place)
         bbox = list(division.bbox)
 
     if bbox is None:
@@ -783,7 +874,10 @@ def cache_build_cmd():
 
 
 @cli.command()
-@click.option("--in", "in_place", required=True, type=str)
+@click.option("--in", "in_place", required=False, type=str,
+              help="Resolve a place name to a bbox via the divisions index.")
+@click.option("--bbox", required=False, type=BboxParamType(),
+              help="Bounding box xmin,ymin,xmax,ymax. Mutually exclusive with --in.")
 @click.option("--category", required=False, type=str,
               help="Shortcut for --where categories.primary=VAL")
 @click.option("--where", "where_exprs", multiple=True)
@@ -793,13 +887,17 @@ def cache_build_cmd():
 @click.option("-o", "--output", required=False, type=click.Path())
 @click.option("-r", "--release", default=None, callback=validate_release,
               required=False)
-def places(in_place, category, where_exprs, output_format, output, release):
+def places(in_place, bbox, category, where_exprs, output_format, output, release):
     """Download POIs in a named place. Filter by --category for common asks."""
-    try:
-        division = best_match(in_place)
-    except LookupError as e:
-        raise click.UsageError(str(e))
-    bbox = list(division.bbox)
+    if bbox is not None and in_place is not None:
+        raise click.UsageError("--bbox and --in are mutually exclusive")
+    if bbox is None and in_place is None:
+        raise click.UsageError("Provide --in or --bbox")
+    if in_place is not None:
+        division = _resolve_in_place(in_place)
+        bbox = list(division.bbox)
+    else:
+        bbox = list(bbox)
 
     try:
         filters = [parse_where_expr(e) for e in where_exprs]
@@ -823,11 +921,45 @@ def places(in_place, category, where_exprs, output_format, output, release):
         return
 
     with get_writer(output_format, output_file, schema=reader.schema) as writer:
-        copy(reader, writer)
+        rows_written = copy(reader, writer)
+
+    if rows_written == 0:
+        # Zero-result hint: was a categories.primary filter the cause?
+        # If so, suggest near-match values from the bbox's actual category list.
+        cat_filters = [
+            f for f in filters
+            if f.key == "categories.primary" and f.op in ("=", "in")
+        ]
+        if cat_filters:
+            target = cat_filters[0].value
+            if isinstance(target, list):
+                target = target[0] if target else None
+            if target:
+                hits = _suggest_categories("place", bbox, release, str(target))
+                if hits:
+                    click.secho(
+                        f"[overturemaps] 0 rows. No place has "
+                        f"categories.primary={target!r} in this bbox. "
+                        f"Did you mean: {', '.join(hits)}? "
+                        f"Run `overturemaps categories -t place --bbox …` "
+                        f"to see the full list.",
+                        fg="yellow", err=True,
+                    )
+                else:
+                    click.secho(
+                        f"[overturemaps] 0 rows. categories.primary={target!r} "
+                        f"is not present in this bbox. Run "
+                        f"`overturemaps categories -t place --bbox …` "
+                        f"to see what's available.",
+                        fg="yellow", err=True,
+                    )
 
 
 @cli.command()
-@click.option("--in", "in_place", required=True, type=str)
+@click.option("--in", "in_place", required=False, type=str,
+              help="Resolve a place name to a bbox via the divisions index.")
+@click.option("--bbox", required=False, type=BboxParamType(),
+              help="Bounding box xmin,ymin,xmax,ymax. Mutually exclusive with --in.")
 @click.option("--where", "where_exprs", multiple=True)
 @click.option("-f", "output_format",
               type=click.Choice(["geojson", "geojsonseq", "geoparquet"]),
@@ -835,13 +967,17 @@ def places(in_place, category, where_exprs, output_format, output, release):
 @click.option("-o", "--output", required=False, type=click.Path())
 @click.option("-r", "--release", default=None, callback=validate_release,
               required=False)
-def buildings(in_place, where_exprs, output_format, output, release):
+def buildings(in_place, bbox, where_exprs, output_format, output, release):
     """Download buildings in a named place."""
-    try:
-        division = best_match(in_place)
-    except LookupError as e:
-        raise click.UsageError(str(e))
-    bbox = list(division.bbox)
+    if bbox is not None and in_place is not None:
+        raise click.UsageError("--bbox and --in are mutually exclusive")
+    if bbox is None and in_place is None:
+        raise click.UsageError("Provide --in or --bbox")
+    if in_place is not None:
+        division = _resolve_in_place(in_place)
+        bbox = list(division.bbox)
+    else:
+        bbox = list(bbox)
 
     try:
         filters = [parse_where_expr(e) for e in where_exprs] or None
@@ -862,7 +998,10 @@ def buildings(in_place, where_exprs, output_format, output, release):
 
 
 @cli.command()
-@click.option("--in", "in_place", required=True, type=str)
+@click.option("--in", "in_place", required=False, type=str,
+              help="Resolve a place name to a bbox via the divisions index.")
+@click.option("--bbox", required=False, type=BboxParamType(),
+              help="Bounding box xmin,ymin,xmax,ymax. Mutually exclusive with --in.")
 @click.option("--class", "road_class", required=False, type=str,
               help="Shortcut for --where class=VAL (e.g. motorway, primary)")
 @click.option("--where", "where_exprs", multiple=True)
@@ -872,13 +1011,17 @@ def buildings(in_place, where_exprs, output_format, output, release):
 @click.option("-o", "--output", required=False, type=click.Path())
 @click.option("-r", "--release", default=None, callback=validate_release,
               required=False)
-def roads(in_place, road_class, where_exprs, output_format, output, release):
+def roads(in_place, bbox, road_class, where_exprs, output_format, output, release):
     """Download road segments in a named place."""
-    try:
-        division = best_match(in_place)
-    except LookupError as e:
-        raise click.UsageError(str(e))
-    bbox = list(division.bbox)
+    if bbox is not None and in_place is not None:
+        raise click.UsageError("--bbox and --in are mutually exclusive")
+    if bbox is None and in_place is None:
+        raise click.UsageError("Provide --in or --bbox")
+    if in_place is not None:
+        division = _resolve_in_place(in_place)
+        bbox = list(division.bbox)
+    else:
+        bbox = list(bbox)
 
     try:
         filters = [parse_where_expr(e) for e in where_exprs]
@@ -902,6 +1045,70 @@ def roads(in_place, road_class, where_exprs, output_format, output, release):
 
 
 @cli.command()
+@click.option("--in", "in_place", required=False, type=str,
+              help="Resolve a place name to a bbox via the divisions index.")
+@click.option("--bbox", required=False, type=BboxParamType(),
+              help="Bounding box xmin,ymin,xmax,ymax. Mutually exclusive with --in.")
+@click.option("--street", required=False, type=str,
+              help="Street name (case-insensitive substring). Example: --street Fountain")
+@click.option("--number", required=False, type=str,
+              help="House/building number (exact match; field is a string, so \"1208\" or \"1208A\").")
+@click.option("--postcode", required=False, type=str,
+              help="Postal code (exact match).")
+@click.option("--where", "where_exprs", multiple=True)
+@click.option("-f", "output_format",
+              type=click.Choice(["geojson", "geojsonseq", "geoparquet"]),
+              default="geojsonseq", show_default=True)
+@click.option("-o", "--output", required=False, type=click.Path())
+@click.option("-r", "--release", default=None, callback=validate_release,
+              required=False)
+def addresses(in_place, bbox, street, number, postcode, where_exprs,
+              output_format, output, release):
+    """Find addresses in a named place or bbox.
+
+    --street uses case-insensitive substring match ("Fountain" matches "Fountain
+    St", "Fountain Ave", "E Fountain Blvd"). --number and --postcode are exact.
+    For other fields, use --where.
+
+    Requires --in or --bbox to keep queries bounded; the global address dataset
+    is too large to scan unfiltered.
+    """
+    if bbox is not None and in_place is not None:
+        raise click.UsageError("--bbox and --in are mutually exclusive")
+    if bbox is None and in_place is None:
+        raise click.UsageError("Provide --in or --bbox")
+    if in_place is not None:
+        division = _resolve_in_place(in_place)
+        bbox = list(division.bbox)
+    else:
+        bbox = list(bbox)
+
+    try:
+        filters = [parse_where_expr(e) for e in where_exprs]
+    except ValueError as e:
+        raise click.UsageError(str(e))
+    if street is not None:
+        filters.append(ParsedFilter(key="street", op="~", value=street))
+    if number is not None:
+        filters.append(ParsedFilter(key="number", op="=", value=str(number)))
+    if postcode is not None:
+        filters.append(ParsedFilter(key="postcode", op="=", value=str(postcode)))
+
+    if output_format == "geoparquet" and output is None:
+        raise click.UsageError("Output file (-o/--output) is required for geoparquet")
+    output_file = sys.stdout if output is None else output
+
+    reader = record_batch_reader(
+        "address", bbox, release, None, None, True,
+        where_filters=filters or None,
+    )
+    if reader is None:
+        return
+    with get_writer(output_format, output_file, schema=reader.schema) as writer:
+        copy(reader, writer)
+
+
+@cli.command()
 @click.argument("latlon", type=str)
 @click.option("-t", "--type", "type_",
               type=click.Choice(get_all_overture_types()), default="place",
@@ -909,13 +1116,16 @@ def roads(in_place, road_class, where_exprs, output_format, output, release):
 @click.option("-n", default=10, show_default=True, type=int)
 @click.option("--radius", type=int, required=False,
               help="Radius in meters; defaults per type.")
+@click.option("--where", "where_exprs", multiple=True,
+              help="Attribute filter K OP V (repeatable). "
+                   "Example: --where categories.primary=coffee_shop")
 @click.option("-f", "output_format",
               type=click.Choice(["geojson", "geojsonseq", "geoparquet"]),
               default="geojsonseq", show_default=True)
 @click.option("-o", "--output", required=False, type=click.Path())
 @click.option("-r", "--release", default=None, callback=validate_release,
               required=False)
-def at(latlon, type_, n, radius, output_format, output, release):
+def at(latlon, type_, n, radius, where_exprs, output_format, output, release):
     """Nearest-neighbor lookup. LATLON is 'LAT,LON' (lat first, geographic)."""
     parts = [p.strip() for p in latlon.split(",")]
     if len(parts) != 2:
@@ -930,7 +1140,16 @@ def at(latlon, type_, n, radius, output_format, output, release):
         radius = DEFAULT_RADIUS_BY_TYPE.get(type_, 100)
     bbox = list(bbox_around_point(lat, lon, radius))
 
-    reader = record_batch_reader(type_, bbox, release, None, None, True)
+    try:
+        where_filters = (
+            [parse_where_expr(e) for e in where_exprs] if where_exprs else None
+        )
+    except ValueError as e:
+        raise click.UsageError(str(e))
+
+    reader = record_batch_reader(
+        type_, bbox, release, None, None, True, where_filters=where_filters,
+    )
     if reader is None:
         return
 
