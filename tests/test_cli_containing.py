@@ -39,10 +39,14 @@ def test_containing_returns_innermost_first(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
     monkeypatch.setattr("overturemaps.cli.get_latest_release",
                         lambda: "2025-12-17.0")
-    # We stub _polygon_contains to always return True so the test doesn't hit S3.
+    # We stub _polygon_contains and _prefetch_polygons so the test doesn't hit S3.
     monkeypatch.setattr(
         "overturemaps.cli._polygon_contains",
         lambda division_id, lon, lat, candidate_bbox=None, geometry_wkb=None: True,
+    )
+    monkeypatch.setattr(
+        "overturemaps.cli._prefetch_polygons",
+        lambda division_ids, lon, lat, release: None,
     )
 
     _write_index(tmp_path)

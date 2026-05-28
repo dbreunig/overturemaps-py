@@ -18,7 +18,7 @@ class Division:
     subtype: str
     country: Optional[str]
     region: Optional[str]
-    admin_level: int
+    admin_level: Optional[int]
     population: Optional[int]
     parent_division_id: Optional[str]
     bbox: tuple[float, float, float, float]  # xmin, ymin, xmax, ymax
@@ -96,7 +96,8 @@ _COUNTRY_ALIASES = {
 
 def _normalize_qualifier(q: str) -> str:
     """Apply common aliases so 'USA' or 'United States' map to 'US'."""
-    return _COUNTRY_ALIASES.get(q.strip().upper(), q)
+    normalized = q.strip().upper()
+    return _COUNTRY_ALIASES.get(normalized, normalized)
 
 
 def _parse_query(query: str) -> tuple[str, list[str]]:
@@ -107,17 +108,23 @@ def _parse_query(query: str) -> tuple[str, list[str]]:
     return name, qualifiers
 
 
+_index_cache: dict[str, "pq.Table"] = {}
+
+
 def _load_index_table():
     release = _latest_release()
-    path = ensure_index(release)
-    return pq.read_table(path)
+    if release not in _index_cache:
+        path = ensure_index(release)
+        _index_cache[release] = pq.read_table(path)
+    return _index_cache[release]
 
 
 def resolve(query: str) -> List[Division]:
     """Return all divisions matching the query (name + optional qualifiers).
 
-    Returns a list ordered by best-match-first: higher admin_level
-    (innermost area) preferred, then higher population.
+    Returns a list ordered by best-match-first: divisions with a known
+    population first, then by descending population, then by descending
+    admin_level (innermost area) as a tiebreaker.
     """
     name, qualifiers = _parse_query(query)
     table = _load_index_table()

@@ -49,7 +49,7 @@ def test_schema_command_json(monkeypatch):
 
 def test_schema_command_serializes_wkb_geometry(monkeypatch):
     """A sample feature with WKB-bytes geometry must serialize as GeoJSON."""
-    import shapely
+    import shapely.wkb
     from shapely.geometry import Point
 
     schema = pa.schema([

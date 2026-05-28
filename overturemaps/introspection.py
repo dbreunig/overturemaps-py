@@ -83,8 +83,6 @@ def flatten_schema(schema: pa.Schema) -> List[dict]:
             for i in range(type_.num_fields):
                 child = type_.field(i)
                 _walk(f"{prefix}.{child.name}" if prefix else child.name, child.type)
-        elif pa.types.is_list(type_) or pa.types.is_large_list(type_):
-            out.append({"name": prefix, "type": str(type_)})
         else:
             out.append({"name": prefix, "type": str(type_)})
 

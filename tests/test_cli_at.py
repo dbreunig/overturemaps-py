@@ -32,7 +32,7 @@ class _Reader:
 
 def test_at_sorts_by_distance(monkeypatch, tmp_path):
     """`at` should keep the N closest features, sorted by distance ascending."""
-    import shapely
+    import shapely.wkb
     from shapely.geometry import Point
 
     # Three points: the third is closest, the first is farthest.

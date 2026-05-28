@@ -39,6 +39,33 @@ from .cache import cache_info, clear_cache, build_index, index_path
 from . import skill_installer
 
 
+def _safe_reader(type_, bbox, release, ct, rt, stac, **kw):
+    """Wrap record_batch_reader, converting schema-validation ValueError."""
+    try:
+        return record_batch_reader(type_, bbox, release, ct, rt, stac, **kw)
+    except ValueError as e:
+        raise click.UsageError(str(e))
+
+
+def _safe_count(type_, **kw):
+    """Wrap count_rows, converting schema-validation ValueError."""
+    try:
+        return count_rows(type_, **kw)
+    except ValueError as e:
+        raise click.UsageError(str(e))
+
+
+def _parse_latlon(latlon: str) -> tuple[float, float]:
+    """Parse 'LAT,LON' string into (lat, lon) floats."""
+    parts = [p.strip() for p in latlon.split(",")]
+    if len(parts) != 2:
+        raise click.UsageError("LATLON must be 'LAT,LON'")
+    try:
+        return float(parts[0]), float(parts[1])
+    except ValueError:
+        raise click.UsageError("LATLON values must be numeric")
+
+
 def _json_default(value):
     """Fallback serializer for orjson — hex-encode raw bytes."""
     if isinstance(value, (bytes, bytearray)):
@@ -377,10 +404,11 @@ def download(
     if in_place is not None:
         division = _resolve_in_place(in_place)
         bbox = list(division.bbox)
+        loc = division.region or division.country or "unknown"
+        pop = f"pop {division.population:,}" if division.population is not None else "pop unknown"
         click.secho(
             f"Resolved {in_place!r} -> {division.name} "
-            f"({division.subtype}, {division.region or division.country}, "
-            f"pop {division.population})",
+            f"({division.subtype}, {loc}, {pop})",
             fg="bright_black", err=True,
         )
 
@@ -423,7 +451,7 @@ def download(
 
     output_file = sys.stdout if output is None else output
 
-    reader = record_batch_reader(
+    reader = _safe_reader(
         type_, bbox, release, connect_timeout, request_timeout, stac,
         where_filters=where_filters,
     )
@@ -603,7 +631,7 @@ def count(ctx, type_, bbox, in_place, where_exprs, release):
     except ValueError as e:
         raise click.UsageError(str(e))
 
-    n = count_rows(
+    n = _safe_count(
         type_, bbox=bbox, release=release, stac=True, where_filters=where_filters,
     )
 
@@ -648,7 +676,7 @@ def sample(type_, bbox, in_place, where_exprs, n, output_format, output, release
     except ValueError as e:
         raise click.UsageError(str(e))
 
-    reader = record_batch_reader(
+    reader = _safe_reader(
         type_, bbox, release, None, None, True,
         where_filters=where_filters,
     )
@@ -913,7 +941,7 @@ def places(in_place, bbox, category, where_exprs, output_format, output, release
 
     output_file = sys.stdout if output is None else output
 
-    reader = record_batch_reader(
+    reader = _safe_reader(
         "place", bbox, release, None, None, True,
         where_filters=filters or None,
     )
@@ -988,7 +1016,7 @@ def buildings(in_place, bbox, where_exprs, output_format, output, release):
         raise click.UsageError("Output file (-o/--output) is required for geoparquet")
     output_file = sys.stdout if output is None else output
 
-    reader = record_batch_reader(
+    reader = _safe_reader(
         "building", bbox, release, None, None, True, where_filters=filters,
     )
     if reader is None:
@@ -1034,7 +1062,7 @@ def roads(in_place, bbox, road_class, where_exprs, output_format, output, releas
         raise click.UsageError("Output file (-o/--output) is required for geoparquet")
     output_file = sys.stdout if output is None else output
 
-    reader = record_batch_reader(
+    reader = _safe_reader(
         "segment", bbox, release, None, None, True,
         where_filters=filters or None,
     )
@@ -1098,7 +1126,7 @@ def addresses(in_place, bbox, street, number, postcode, where_exprs,
         raise click.UsageError("Output file (-o/--output) is required for geoparquet")
     output_file = sys.stdout if output is None else output
 
-    reader = record_batch_reader(
+    reader = _safe_reader(
         "address", bbox, release, None, None, True,
         where_filters=filters or None,
     )
@@ -1127,14 +1155,7 @@ def addresses(in_place, bbox, street, number, postcode, where_exprs,
               required=False)
 def at(latlon, type_, n, radius, where_exprs, output_format, output, release):
     """Nearest-neighbor lookup. LATLON is 'LAT,LON' (lat first, geographic)."""
-    parts = [p.strip() for p in latlon.split(",")]
-    if len(parts) != 2:
-        raise click.UsageError("LATLON must be 'LAT,LON'")
-    try:
-        lat = float(parts[0])
-        lon = float(parts[1])
-    except ValueError:
-        raise click.UsageError("LATLON values must be numeric")
+    lat, lon = _parse_latlon(latlon)
 
     if radius is None:
         radius = DEFAULT_RADIUS_BY_TYPE.get(type_, 100)
@@ -1147,7 +1168,7 @@ def at(latlon, type_, n, radius, where_exprs, output_format, output, release):
     except ValueError as e:
         raise click.UsageError(str(e))
 
-    reader = record_batch_reader(
+    reader = _safe_reader(
         type_, bbox, release, None, None, True, where_filters=where_filters,
     )
     if reader is None:
@@ -1190,9 +1211,12 @@ def at(latlon, type_, n, radius, where_exprs, output_format, output, release):
 
     sample_batch_props = [r[1] for r in rows]
     sample_batch_geoms = [r[2] for r in rows]
+    kept_names = [n for n in reader.schema.names if n not in ("bbox",)]
     new_schema = pa.schema(
-        [(name, reader.schema.field(name).type) for name in reader.schema.names]
+        [(name, reader.schema.field(name).type) for name in kept_names]
     )
+    if reader.schema.metadata:
+        new_schema = new_schema.with_metadata(reader.schema.metadata)
 
     # Build one batch carrying back properties + geometry; rely on existing writer.
     out_rows = []
@@ -1249,13 +1273,60 @@ def _get_division_area_files(release: str, candidate_bbox: tuple) -> list:
         & (_pc.field("bbox", "ymax") > ymin)
     )
     rows = stac_table.filter(type_filter & bbox_filter).to_pylist()
-    return [
-        r["assets"]["aws"]["alternate"]["s3"]["href"][len("s3://"):]
-        for r in rows
-    ]
+    result = []
+    for r in rows:
+        try:
+            href = r["assets"]["aws"]["alternate"]["s3"]["href"]
+            result.append(href[len("s3://"):])
+        except (KeyError, TypeError):
+            continue
+    return result
 
 
 _get_division_area_files._stac_cache = {}  # type: ignore[attr-defined]
+
+
+def _prefetch_polygons(
+    division_ids: list[str],
+    lon: float,
+    lat: float,
+    release: str,
+) -> None:
+    """Batch-fetch division_area polygons into the _polygon_contains cache."""
+    import shapely.wkb
+    import pyarrow.dataset as _ds
+    import pyarrow.fs as _fs
+    import pyarrow.compute as _pc
+    from shapely.ops import unary_union
+
+    cache = _polygon_cache
+    uncached = [did for did in division_ids if did not in cache]
+    if not uncached:
+        return
+
+    fs = _fs.S3FileSystem(
+        anonymous=True, region="us-west-2",
+        connect_timeout=30, request_timeout=120,
+    )
+    path = (
+        f"overturemaps-us-west-2/release/{release}"
+        "/theme=divisions/type=division_area/"
+    )
+    dataset = _ds.dataset(path, filesystem=fs)
+    filter_expr = _pc.field("division_id").isin(uncached)
+    table = dataset.to_table(columns=["division_id", "geometry"], filter=filter_expr)
+
+    by_id: dict[str, list] = {did: [] for did in uncached}
+    for row in table.to_pylist():
+        by_id.setdefault(row["division_id"], []).append(row["geometry"])
+
+    for did in uncached:
+        geom_blobs = by_id.get(did, [])
+        if geom_blobs:
+            geoms = [shapely.wkb.loads(b) for b in geom_blobs]
+            cache[did] = unary_union(geoms)
+        else:
+            cache[did] = None
 
 
 def _polygon_contains(
@@ -1278,7 +1349,7 @@ def _polygon_contains(
     """
     import shapely.wkb
 
-    cache = _polygon_contains._cache  # type: ignore[attr-defined]
+    cache = _polygon_cache
     if division_id in cache:
         poly = cache[division_id]
     elif geometry_wkb is not None:
@@ -1333,7 +1404,7 @@ def _polygon_contains(
     return poly.contains(Point(lon, lat))
 
 
-_polygon_contains._cache = {}  # type: ignore[attr-defined]
+_polygon_cache: dict[str, object] = {}
 
 
 @cli.command()
@@ -1341,14 +1412,7 @@ _polygon_contains._cache = {}  # type: ignore[attr-defined]
 @click.pass_context
 def containing(ctx, latlon):
     """Which divisions contain this point? Innermost (highest admin_level) first."""
-    parts = [p.strip() for p in latlon.split(",")]
-    if len(parts) != 2:
-        raise click.UsageError("LATLON must be 'LAT,LON'")
-    try:
-        lat = float(parts[0])
-        lon = float(parts[1])
-    except ValueError:
-        raise click.UsageError("LATLON values must be numeric")
+    lat, lon = _parse_latlon(latlon)
 
     release = get_latest_release()
     from .cache import ensure_index
@@ -1364,9 +1428,10 @@ def containing(ctx, latlon):
     )
     candidates = table.filter(expr).to_pylist()
 
-    # Confirm via polygon containment.
-    # geometry_wkb is present in indexes built with v1.1.0+; absent in older
-    # cached indexes, in which case the S3 fallback path is used.
+    # Pre-fetch all candidate polygons in a single S3 call, then test containment.
+    _prefetch_polygons(
+        [c["id"] for c in candidates], lon, lat, release,
+    )
     matches = [
         c for c in candidates
         if _polygon_contains(
