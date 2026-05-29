@@ -81,8 +81,18 @@ Hand-authored, question-shaped, tagged. Schema per entry:
   notes: "Ideal path: count -t place --in Brooklyn --category coffee_shop"
 ```
 
-`download_is_legitimate` is the field that keeps the metric honest:
-`download` usage is only counted as a failure when it is `false`.
+`download_is_legitimate` separates two distinct signals — it does **not**
+exempt a download from scrutiny:
+
+- When `false`, a `download` is an **agent failure** (a verb existed and
+  wasn't used).
+- When `true`, a `download` is not an agent failure but **is a coverage
+  gap** — every legitimate download is a candidate for a future convenience
+  verb, alias, or hint that would let the agent avoid `download` entirely.
+
+So the eval records *all* download usage. Both classes flow into synthesis;
+the goal is to drive total download usage toward zero, by fixing agent
+failures (`false`) and by closing coverage gaps (`true`).
 
 **Complexity tiers** and the v1 set of 10 (2 per tier):
 
@@ -155,8 +165,12 @@ Runs are independent; a single batch is 10 × 2 = 20 invocations.
 Normalizes shim log + transcript into one record per run and computes
 **process metrics**:
 
-- `unnecessary_download` — used `download` while `download_is_legitimate`
-  is `false`.
+- `download_used` — used `download` at all (recorded for every run).
+- `unnecessary_download` — `download_used` while `download_is_legitimate`
+  is `false` (an agent failure).
+- `legitimate_download` — `download_used` while `download_is_legitimate` is
+  `true` (not an agent failure, but flagged as a coverage gap for synthesis,
+  with the type(s) downloaded recorded).
 - `cli_error_count` and **error taxonomy** per failing call, classified from
   exit code + stderr patterns:
   - `unknown_command` (e.g. `No such command`)
@@ -178,7 +192,17 @@ Output: `evals/runs/<id>-<n>/record.json`.
 Aggregates all records, clusters failures by `(taxonomy × question/tier)`,
 ranks clusters by frequency × severity, and runs an LLM step that converts
 each cluster into a **concrete, evidence-backed proposal** tied to the
-offending traces. Examples of proposal shapes:
+offending traces.
+
+It treats **all** download usage as material — not just `unnecessary_download`.
+Legitimate downloads (`legitimate_download`, grouped by downloaded type) get
+their own synthesis pass that asks: *what would let the agent avoid this
+download?* — typically a new convenience verb for an uncovered type (e.g. a
+`water` or `land_use` verb), an alias, or a discovery hint. The aim is to
+drive total download usage toward zero, so coverage gaps surface as
+first-class proposals alongside agent failures.
+
+Examples of proposal shapes:
 
 - "2/2 runs guessed `--category cafe`; add `cafe`→`coffee_shop` to the
   near-match hint."
