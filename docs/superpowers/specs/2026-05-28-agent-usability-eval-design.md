@@ -30,6 +30,8 @@ Failures are aggregated and synthesized into concrete proposed improvements
 
 - **Agent harness:** real Claude Code headless (`claude -p`), which
   auto-loads the bundled Overture Skill — the intended deployment.
+- **Model:** Sonnet is the default; a `--model` flag passes through to
+  `claude -p` so a run can use Opus (or another model) when desired.
 - **Data backend:** live Overture S3, restricted to small queries (small
   bboxes / small named places) to keep downloads cheap and fast.
 - **Scoring:** process signals only (download usage + CLI errors +
@@ -41,7 +43,7 @@ Failures are aggregated and synthesized into concrete proposed improvements
   give-up signal, plus a `PATH` shim for clean command/error/download
   signals.
 - **Skill state:** Skill-installed only in v1 (no naked-CLI control arm).
-- **Scale (v1):** 8 questions × 2 repeats = 16 runs.
+- **Scale (v1):** 10 questions × 2 repeats = 20 runs.
 
 Out of scope for v1: without-Skill control arm, answer-correctness scoring,
 multi-model comparison, CI integration, auto-applied patches.
@@ -82,11 +84,11 @@ Hand-authored, question-shaped, tagged. Schema per entry:
 `download_is_legitimate` is the field that keeps the metric honest:
 `download` usage is only counted as a failure when it is `false`.
 
-**Complexity tiers** and the v1 set of 8 (2 per tier):
+**Complexity tiers** and the v1 set of 10 (2 per tier):
 
 - **T1 — single verb.**
   1. "How many coffee shops are in Brooklyn?" (`count`/`places`)
-  2. "Where is Boston, MA, and what's its bounding box?" (`where`)
+  2. "Where is Boston, MA, and what is its bounding box?" (`where`)
 - **T2 — discovery / filter needed.**
   3. "Find buildings taller than 150m in Manhattan." (`buildings --where height>150`)
   4. "What restaurant categories exist for places in Brooklyn?" (`categories` → `places`)
@@ -96,8 +98,25 @@ Hand-authored, question-shaped, tagged. Schema per entry:
 - **T4 — legitimate escape hatch** (`download_is_legitimate: true`).
   7. "Get the water features in downtown Boston." (`download -t water`)
   8. "Get the land-use polygons for a small area of Brooklyn." (`download -t land_use`)
+- **T5 — compound / cross-layer.** Questions that combine multiple layers
+  (places + roads/segments, places + places) plus a spatial relationship.
+  These primarily exercise *decomposition and verb-chaining*, not the
+  download penalty: a cross-layer spatial join has no single verb, so
+  `download` is marked legitimate (`download_is_legitimate: true`) and the
+  scoring focus shifts to error rate, wasted commands, and whether the agent
+  completed. Each carries a `subtasks` list in its `notes` describing the
+  expected decomposition.
+  9. "Find all the hardware stores within 200m of bike paths in Alameda
+     County." (places `hardware_store` + roads/segments cycleways + 200m
+     proximity join)
+  10. "How many bus stops have a coffee shop within 100m in Williamsburg,
+      Brooklyn?" (places `bus_stop` + places `coffee_shop` + 100m proximity
+      count)
 
-All places/bboxes are deliberately small to bound download cost.
+All places/bboxes are deliberately small to bound download cost; the
+compound questions use small named areas (Williamsburg) or accept that
+county-scale queries (Alameda County) are the most expensive in the set and
+sit at the edge of the cost guard.
 
 ### 2. Runner (`evals/runner.py`)
 
@@ -109,12 +128,14 @@ For each (question × repeat):
    cache once before the batch.
 3. Put the **shim** first on `PATH` so every `overturemaps` invocation is
    logged with argv, exit code, stdout, and stderr.
-4. Invoke `claude -p "<question>" --output-format stream-json` with bash
-   permitted, in the Skill-installed environment.
+4. Invoke `claude -p "<question>" --model <model> --output-format
+   stream-json` with bash permitted, in the Skill-installed environment.
+   `<model>` defaults to Sonnet and is overridable via the runner's
+   `--model` flag (e.g. `--model opus`).
 5. Persist the transcript (stream-json) and the shim log to
    `evals/runs/<id>-<n>/`.
 
-Runs are independent; a single batch is 8 × 2 = 16 invocations.
+Runs are independent; a single batch is 10 × 2 = 20 invocations.
 
 ### 3. Trace capture (hybrid)
 
@@ -209,7 +230,7 @@ shim + cache ───┘                     │
 
 ## Success criteria
 
-- `just eval` produces `report.md` + `proposals.json` from a live 16-run
+- `just eval` produces `report.md` + `proposals.json` from a live 20-run
   batch.
 - The scorer correctly classifies every error in the fixture set.
 - The report ranks failure clusters and each cluster carries at least one
