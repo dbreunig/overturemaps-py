@@ -139,3 +139,8 @@ cython_debug/
 
 # Benchmark results (machine-specific)
 results/
+
+# Agent-usability eval artifacts
+evals/runs/
+evals/report.md
+evals/proposals.json

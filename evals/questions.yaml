@@ -1,0 +1,96 @@
+# Agent-usability eval question bank.
+# Fields:
+#   id                     stable slug (no '__' — that delimits run dirs)
+#   question               the prompt handed verbatim to `claude -p`
+#   tier                   1..5 complexity tier
+#   download_is_legitimate true only when no convenience verb covers the type
+#   target_type            expected Overture type(s) for the answer
+#   place                  optional; resolved by the cost guard to bound query size
+#   notes                  ideal path (and, for compound, the expected decomposition)
+#   subtasks               optional; expected verb-by-verb decomposition (compound)
+
+- id: coffee-brooklyn-count
+  question: "How many coffee shops are in Brooklyn?"
+  tier: 1
+  download_is_legitimate: false
+  target_type: place
+  place: "Brooklyn, US-NY"
+  notes: "Ideal: count -t place --in Brooklyn --category coffee_shop"
+
+- id: where-boston
+  question: "Where is Boston, MA, and what is its bounding box?"
+  tier: 1
+  download_is_legitimate: false
+  target_type: division
+  place: "Boston, US-MA"
+  notes: "Ideal: where 'Boston, MA' (optionally --json for the bbox)"
+
+- id: tall-buildings-manhattan
+  question: "Find buildings taller than 150m in Manhattan."
+  tier: 2
+  download_is_legitimate: false
+  target_type: building
+  place: "Manhattan, US-NY"
+  notes: "Ideal: buildings --in Manhattan --where 'height>150'"
+
+- id: restaurant-categories-brooklyn
+  question: "What restaurant categories exist for places in Brooklyn?"
+  tier: 2
+  download_is_legitimate: false
+  target_type: place
+  place: "Brooklyn, US-NY"
+  notes: "Ideal: categories -t place --in Brooklyn (then filter to restaurant_* values)"
+
+- id: pois-near-point
+  question: "What POIs are within 500m of 40.7128,-74.0060?"
+  tier: 3
+  download_is_legitimate: false
+  target_type: place
+  notes: "Ideal: at 40.7128,-74.0060 -t place --radius 500"
+
+- id: containing-point
+  question: "Which administrative areas contain the point 40.7128,-74.0060?"
+  tier: 3
+  download_is_legitimate: false
+  target_type: division
+  notes: "Ideal: containing 40.7128,-74.0060"
+
+- id: water-downtown-boston
+  question: "Get the water features in downtown Boston."
+  tier: 4
+  download_is_legitimate: true
+  target_type: water
+  place: "Boston, US-MA"
+  notes: "No convenience verb for water; download -t water is correct. Coverage-gap candidate."
+
+- id: landuse-brooklyn
+  question: "Get the land-use polygons for a small area of Brooklyn."
+  tier: 4
+  download_is_legitimate: true
+  target_type: land_use
+  place: "Brooklyn, US-NY"
+  notes: "No convenience verb for land_use; download -t land_use is correct. Coverage-gap candidate."
+
+- id: hardware-near-bikepaths-alameda
+  question: "Find all the hardware stores within 200m of bike paths in Alameda County."
+  tier: 5
+  download_is_legitimate: false
+  target_type: [place, segment]
+  place: "Alameda County, US-CA"
+  notes: "Both layers have verbs; fetch each and join in code. download -t place/segment is a failure."
+  subtasks:
+    - "places --in 'Alameda County' --category hardware_store"
+    - "roads --in 'Alameda County' (filter to cycleway / bike paths)"
+    - "spatial join: hardware stores within 200m of a bike path"
+
+- id: busstops-coffee-williamsburg
+  question: "How many bus stops have a coffee shop within 100m in Williamsburg, Brooklyn?"
+  tier: 5
+  download_is_legitimate: false
+  target_type: place
+  place: "Williamsburg, US-NY"
+  notes: "Both layers are places; fetch each and join in code. download -t place is a failure."
+  subtasks:
+    - "places --in Williamsburg --category bus_stop"
+    - "places --in Williamsburg --category coffee_shop"
+    - "spatial join + count: bus stops with a coffee shop within 100m"

@@ -46,6 +46,7 @@ dev = [
     "pytest>=8.0.0",
     "pytest-mock>=3.11.0",
     "pytest-benchmark>=5.0.0",
+    "pyyaml>=6.0.3",
 ]
 binary = [
     "pyinstaller>=6.0",
