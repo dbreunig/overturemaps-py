@@ -100,12 +100,14 @@ Hand-authored, question-shaped, tagged. Schema per entry:
   8. "Get the land-use polygons for a small area of Brooklyn." (`download -t land_use`)
 - **T5 — compound / cross-layer.** Questions that combine multiple layers
   (places + roads/segments, places + places) plus a spatial relationship.
-  These primarily exercise *decomposition and verb-chaining*, not the
-  download penalty: a cross-layer spatial join has no single verb, so
-  `download` is marked legitimate (`download_is_legitimate: true`) and the
-  scoring focus shifts to error rate, wasted commands, and whether the agent
-  completed. Each carries a `subtasks` list in its `notes` describing the
-  expected decomposition.
+  Both layers in these questions are covered by convenience verbs, so the
+  expected path is to fetch each layer with its verb (`places`, `roads`) and
+  perform the spatial join in code — **not** drop to `download`. They are the
+  hardest test of the download metric: `download_is_legitimate: false`, and a
+  `download -t place`/`-t segment` fallback counts as a failure exactly as it
+  does in T1–T3. Scoring also weights *decomposition and verb-chaining*
+  (error rate, wasted commands, completion). Each carries a `subtasks` list
+  in its `notes` describing the expected verb-by-verb decomposition.
   9. "Find all the hardware stores within 200m of bike paths in Alameda
      County." (places `hardware_store` + roads/segments cycleways + 200m
      proximity join)
