@@ -69,3 +69,18 @@ build-binary:
 [group('build')]
 build:
     uv build
+
+# Run the agent-usability eval (live: drives claude -p against Overture S3)
+[group('eval')]
+eval model="sonnet":
+    uv run python -m evals.runner --model {{ model }}
+    uv run python -m evals.score
+    uv run python -m evals.synthesize --model opus
+    @echo "Report: evals/report.md  |  Proposals: evals/proposals.json"
+
+# Single-question eval smoke test (one run, sonnet)
+[group('eval')]
+eval-smoke:
+    uv run python -m evals.runner --smoke --model sonnet
+    uv run python -m evals.score
+    @echo "Smoke run captured under evals/runs/"
