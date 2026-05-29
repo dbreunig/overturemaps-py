@@ -42,11 +42,11 @@
   notes: "Ideal: categories -t place --in Brooklyn (then filter to restaurant_* values)"
 
 - id: pois-near-point
-  question: "What POIs are within 500m of 40.7128,-74.0060?"
+  question: "What POIs are within 150m of 40.7128,-74.0060?"
   tier: 3
   download_is_legitimate: false
   target_type: place
-  notes: "Ideal: at 40.7128,-74.0060 -t place --radius 500"
+  notes: "Ideal: at 40.7128,-74.0060 -t place --radius 150 (radius kept small to bound the S3 read)"
 
 - id: containing-point
   question: "Which administrative areas contain the point 40.7128,-74.0060?"
