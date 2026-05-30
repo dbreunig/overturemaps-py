@@ -99,3 +99,24 @@ def test_buildings_requires_in_or_bbox():
     result = runner.invoke(cli, ["buildings", "-f", "geojsonseq"])
     assert result.exit_code != 0
     assert "Provide --in or --bbox" in result.output
+
+
+def test_buildings_in_no_match_suggests_parent(monkeypatch):
+    """A failing --in resolution names the bare-name candidate that resolves."""
+    williamsburg_va = Division(
+        id="williamsburg-va", name="Williamsburg", subtype="locality",
+        country="US", region="US-VA", admin_level=8, population=15425,
+        parent_division_id=None, bbox=(-76.75, 37.25, -76.66, 37.32),
+    )
+
+    def fake_resolve(q):
+        return [williamsburg_va] if q == "Williamsburg" else []
+
+    monkeypatch.setattr("overturemaps.cli.resolve", fake_resolve)
+    runner = CliRunner()
+    result = runner.invoke(cli, [
+        "buildings", "--in", "Williamsburg, Brooklyn", "-f", "geojsonseq",
+    ])
+    assert result.exit_code != 0
+    assert "Williamsburg" in result.output
+    assert "--bbox" in result.output

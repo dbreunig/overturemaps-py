@@ -94,10 +94,43 @@ _COUNTRY_ALIASES = {
 }
 
 
+# Full US state/territory names → USPS code. A qualifier like "New York" is
+# normalized to "NY" so the region suffix match ("-NY" against "US-NY") fires,
+# just like the short forms "NY"/"US-NY" already do.
+_US_STATE_ALIASES = {
+    "ALABAMA": "AL", "ALASKA": "AK", "ARIZONA": "AZ", "ARKANSAS": "AR",
+    "CALIFORNIA": "CA", "COLORADO": "CO", "CONNECTICUT": "CT", "DELAWARE": "DE",
+    "FLORIDA": "FL", "GEORGIA": "GA", "HAWAII": "HI", "IDAHO": "ID",
+    "ILLINOIS": "IL", "INDIANA": "IN", "IOWA": "IA", "KANSAS": "KS",
+    "KENTUCKY": "KY", "LOUISIANA": "LA", "MAINE": "ME", "MARYLAND": "MD",
+    "MASSACHUSETTS": "MA", "MICHIGAN": "MI", "MINNESOTA": "MN",
+    "MISSISSIPPI": "MS", "MISSOURI": "MO", "MONTANA": "MT", "NEBRASKA": "NE",
+    "NEVADA": "NV", "NEW HAMPSHIRE": "NH", "NEW JERSEY": "NJ",
+    "NEW MEXICO": "NM", "NEW YORK": "NY", "NORTH CAROLINA": "NC",
+    "NORTH DAKOTA": "ND", "OHIO": "OH", "OKLAHOMA": "OK", "OREGON": "OR",
+    "PENNSYLVANIA": "PA", "RHODE ISLAND": "RI", "SOUTH CAROLINA": "SC",
+    "SOUTH DAKOTA": "SD", "TENNESSEE": "TN", "TEXAS": "TX", "UTAH": "UT",
+    "VERMONT": "VT", "VIRGINIA": "VA", "WASHINGTON": "WA",
+    "WEST VIRGINIA": "WV", "WISCONSIN": "WI", "WYOMING": "WY",
+    "DISTRICT OF COLUMBIA": "DC", "WASHINGTON DC": "DC", "WASHINGTON, D.C.": "DC",
+    "PUERTO RICO": "PR", "GUAM": "GU", "AMERICAN SAMOA": "AS",
+    "US VIRGIN ISLANDS": "VI", "U.S. VIRGIN ISLANDS": "VI",
+    "NORTHERN MARIANA ISLANDS": "MP",
+}
+
+
 def _normalize_qualifier(q: str) -> str:
-    """Apply common aliases so 'USA' or 'United States' map to 'US'."""
+    """Apply common aliases so 'USA'/'United States' → 'US' and full US
+    state names like 'New York' → 'NY' (matched as the '-NY' region suffix).
+
+    Country aliases take precedence over state names where they would collide.
+    """
     normalized = q.strip().upper()
-    return _COUNTRY_ALIASES.get(normalized, normalized)
+    if normalized in _COUNTRY_ALIASES:
+        return _COUNTRY_ALIASES[normalized]
+    if normalized in _US_STATE_ALIASES:
+        return _US_STATE_ALIASES[normalized]
+    return normalized
 
 
 def _parse_query(query: str) -> tuple[str, list[str]]:

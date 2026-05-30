@@ -16,8 +16,11 @@ Triggering phrases (illustrative, not exhaustive):
 
 - *"How many coffee shops are in Brooklyn?"* → `where` + `count -t place --in Brooklyn --where categories.primary=coffee_shop`
 - *"Find hospitals in Manhattan"* → `places --in "Manhattan" --category hospital`
-- *"Show buildings taller than 100m in Chicago"* → `buildings --in "Chicago, IL" --where height>100`
+- *"Show buildings taller than 100m in Chicago"* → `buildings --in "Chicago, IL" --where 'height>100'`
 - *"What highways run through Texas?"* → `roads --in "Texas, USA" --class motorway`
+- *"Where are the bike paths in Alameda County?"* → `roads --in "Alameda County, CA" --class cycleway`
+- *"Find the lakes near Minneapolis"* → `water --in "Minneapolis, MN" --class lake`
+- *"Map residential zoning in Brooklyn"* → `landuse --in "Brooklyn, NY" --class residential`
 - *"What admin area is this address in?"* → `containing LAT,LON`
 - *"What's at 40.7128, -74.0060?"* → `at 40.7128,-74.0060`
 - *"What's the bounding box of Boston?"* → `where "Boston, MA" --json`
@@ -26,10 +29,10 @@ Triggering phrases (illustrative, not exhaustive):
 the local script (e.g. Tokyo is `東京都`, not `Tokyo`). For non-Latin cities,
 prefer the local-script form, use `containing LAT,LON` with coordinates, or
 fall back to `--bbox`. The `where` command's qualifier syntax is
-`"Place, ST"`, `"Place, US-ST"`, `"Place, CC"` (alpha-2), `"Place, CCC"`
-(alpha-3), or `"Place, Country Name"` — e.g. all of these resolve Boston:
-`"Boston, MA"`, `"Boston, US-MA"`, `"Boston, US"`, `"Boston, USA"`,
-`"Boston, United States"`.
+`"Place, ST"`, `"Place, US-ST"`, `"Place, Full State Name"`, `"Place, CC"`
+(alpha-2), `"Place, CCC"` (alpha-3), or `"Place, Country Name"` — e.g. all of
+these resolve Boston: `"Boston, MA"`, `"Boston, Massachusetts"`,
+`"Boston, US-MA"`, `"Boston, US"`, `"Boston, USA"`, `"Boston, United States"`.
 
 Negative examples (do NOT reach for overturemaps):
 
@@ -70,14 +73,22 @@ overturemaps places --in "Brooklyn" --category cafe \
 
 ### 5. Tall buildings
 ```bash
-overturemaps buildings --in "Manhattan" --where height>150 \
+# Single-quote any --where with < or > so the shell doesn't treat it as a
+# redirection (see Anti-patterns).
+overturemaps buildings --in "Manhattan" --where 'height>150' \
   -f geojsonseq -o tall.jsonl
 ```
 
-### 6. Highways in a state
+### 6. Transportation segments (cars, bikes, foot)
 ```bash
+# `roads` returns ALL transportation segments, not just car roads. Use
+# --class to pick motorway / primary / residential / footway / path / cycleway.
 overturemaps roads --in "Texas, US" --class motorway \
   -f geojsonseq -o tx_highways.jsonl
+
+# Bike paths / cycleways:
+overturemaps roads --in "Alameda County, CA" --class cycleway \
+  -f geojsonseq -o bikepaths.jsonl
 ```
 
 ### 7. What's near a point
@@ -117,17 +128,43 @@ overturemaps cache build             # force rebuild against latest release
 overturemaps cache clear             # nuke local cache
 ```
 
+### 13. Water features (oceans, lakes, rivers)
+```bash
+overturemaps water --in "Minneapolis, MN" --class lake \
+  -f geojsonseq -o lakes.jsonl
+```
+
+### 14. Land use (zoning-style polygons)
+```bash
+overturemaps landuse --in "Brooklyn, NY" --class residential \
+  -f geojsonseq -o residential.jsonl
+```
+
+### 15. Bus stops and other transit POIs
+```bash
+# Transit stops are PLACES (categories.primary), not infrastructure.
+overturemaps places --in "Williamsburg, Brooklyn" --category bus_stop \
+  -f geojsonseq -o busstops.jsonl
+```
+
+### 16. Get a division's boundary polygon (for clipping / spatial joins)
+```bash
+# Emits a GeoJSON Feature with the division_area polygon — the supported way
+# to get a boundary. Don't use `download -t division_area` for this.
+overturemaps where "Alameda County, CA" --geometry > county.geojson
+```
+
 ## Schema cheatsheet
 
 | Type | Theme | Key properties |
 |---|---|---|
-| `place` | places | `categories.primary` (hotel, restaurant, cafe, hospital, ...), `names.primary`, `confidence`, `addresses` |
+| `place` | places | `categories.primary` (hotel, restaurant, cafe, hospital, **bus_stop, bus_station, train_station**, ...), `names.primary`, `confidence`, `addresses` |
 | `building` | buildings | `height` (meters), `num_floors`, `class`, `subtype`, `roof_shape` |
-| `segment` | transportation | `class` (motorway, primary, secondary, residential, footway), `subclass`, `surface`, `speed_limits` |
-| `division` | divisions | `subtype` (country, region, county, locality, neighborhood, ...), `admin_level`, `population` |
+| `segment` | transportation | `class` — covers ALL segments, not just car roads: motorway, primary, secondary, residential, **footway, path, cycleway**, sidewalk; plus `subclass`, `surface`, `speed_limits`. Use the `roads` verb with `--class`. |
+| `division` | divisions | `subtype` (country, region, county, locality, neighborhood, ...), `admin_level`, `population`. Use `where … --geometry` for the boundary polygon. |
 | `address` | addresses | `street`, `number`, `postcode`, `country` |
-| `land_use` | base | `class` (commercial, residential, recreation, agriculture, ...) |
-| `water` | base | `class` (ocean, lake, river, ...) |
+| `land_use` | base | `class` (commercial, residential, recreation, agriculture, ...). Use the `landuse` verb with `--class`. |
+| `water` | base | `class` (ocean, lake, river, stream, ...). Use the `water` verb with `--class`. |
 
 Run `overturemaps --json schema -t TYPE` for the full field list of any type.
 
@@ -138,9 +175,14 @@ type's schema. Multiple `--where` flags AND together.
 
 ```
 --where categories.primary=restaurant
---where height>100
+--where 'height>100'
 --where "class in [motorway,primary,trunk]"
 ```
+
+**Always single-quote any `--where` expression containing `<` or `>`.**
+Unquoted, the shell treats `>` as a redirection: `--where height>150` writes a
+file named `150` and passes only `height` to the CLI (which then errors with
+"has no operator").
 
 ## Anti-patterns
 
@@ -160,3 +202,17 @@ type's schema. Multiple `--where` flags AND together.
   commands always emit structured GeoJSON / GeoParquet.
 - **Don't ignore the `--in` warning on stderr.** It tells you which Boston
   you actually got. If wrong, narrow with `--in "Boston, US-MA"`.
+- **Quote `--where` filters with `<` or `>`.** Always single-quote them so the
+  shell does not treat them as redirection (which writes a file named after the
+  number and truncates the filter to just the key): `--where 'height>150'`.
+- **Bus stops and transit points are `place` features.** Use
+  `places --category bus_stop` (also bus_station, train_station) — not
+  `download -t infrastructure`.
+- **`roads` covers bikes and footpaths too.** It returns every transportation
+  segment. Use `roads --class cycleway` (or footway/path) instead of
+  `download -t segment --where class=cycleway`.
+- **Prefer the convenience verbs over `download -t TYPE`.** `places`, `roads`,
+  `buildings`, `addresses`, `water`, and `landuse` all wrap `download` with
+  friendlier flags (`--class`, `--category`) and the same output.
+- **Get boundaries with `where … --geometry`, not `download -t division_area`.**
+  It emits the division polygon as a GeoJSON Feature for clipping or joins.

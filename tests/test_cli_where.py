@@ -65,6 +65,105 @@ def test_where_no_match_json(monkeypatch):
     assert "no_match" in combined or "No match" in combined
 
 
+_WILLIAMSBURG_VA = Division(
+    id="williamsburg-va", name="Williamsburg", subtype="locality",
+    country="US", region="US-VA",
+    admin_level=8, population=15425, parent_division_id=None,
+    bbox=(-76.75, 37.25, -76.66, 37.32),
+)
+
+
+def test_where_no_match_suggests_bare_name(monkeypatch):
+    """A neighborhood-qualified query that fails should name the bare-name
+    candidate that does resolve, so the agent has a recovery path."""
+    def fake_resolve(q):
+        return [_WILLIAMSBURG_VA] if q == "Williamsburg" else []
+
+    monkeypatch.setattr("overturemaps.cli.resolve", fake_resolve)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["where", "Williamsburg, Brooklyn"])
+    assert result.exit_code != 0
+    # Names the resolvable parent candidate and offers recovery paths.
+    assert "Williamsburg" in result.output
+    assert "US-VA" in result.output
+    assert "--bbox" in result.output
+
+
+def test_where_no_match_json_includes_suggestion(monkeypatch):
+    def fake_resolve(q):
+        return [_WILLIAMSBURG_VA] if q == "Williamsburg" else []
+
+    monkeypatch.setattr("overturemaps.cli.resolve", fake_resolve)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--json", "where", "Williamsburg, Brooklyn"])
+    assert result.exit_code != 0
+    combined = result.output + (result.stderr if hasattr(result, "stderr") else "")
+    assert "no_match" in combined
+    assert "Williamsburg" in combined
+
+
+def test_where_geometry_emits_geojson_feature(monkeypatch):
+    """`where --geometry` emits the division_area polygon as a GeoJSON Feature."""
+    from shapely.geometry import box
+
+    monkeypatch.setattr("overturemaps.cli.resolve", lambda q: [_BOSTON])
+    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+                        lambda: "2025-12-17.0")
+
+    def fake_prefetch(ids, lon, lat, release):
+        import overturemaps.cli as c
+        c._polygon_cache[ids[0]] = box(-71.19, 42.23, -70.99, 42.40)
+
+    monkeypatch.setattr("overturemaps.cli._prefetch_polygons", fake_prefetch)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["where", "Boston, MA", "--geometry"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data["type"] == "Feature"
+    assert data["geometry"]["type"] == "Polygon"
+    assert data["properties"]["name"] == "Boston"
+    assert data["properties"]["subtype"] == "locality"
+
+
+def test_where_geojson_alias_flag(monkeypatch):
+    """`--geojson` is an accepted alias for `--geometry`."""
+    from shapely.geometry import box
+
+    monkeypatch.setattr("overturemaps.cli.resolve", lambda q: [_BOSTON])
+    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+                        lambda: "2025-12-17.0")
+
+    def fake_prefetch(ids, lon, lat, release):
+        import overturemaps.cli as c
+        c._polygon_cache[ids[0]] = box(-71.19, 42.23, -70.99, 42.40)
+
+    monkeypatch.setattr("overturemaps.cli._prefetch_polygons", fake_prefetch)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["where", "Boston, MA", "--geojson"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data["type"] == "Feature"
+
+
+def test_where_geometry_no_polygon_errors(monkeypatch):
+    """When no division_area polygon exists, --geometry errors cleanly."""
+    monkeypatch.setattr("overturemaps.cli.resolve", lambda q: [_BOSTON])
+    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+                        lambda: "2025-12-17.0")
+
+    def fake_prefetch(ids, lon, lat, release):
+        import overturemaps.cli as c
+        c._polygon_cache[ids[0]] = None
+
+    monkeypatch.setattr("overturemaps.cli._prefetch_polygons", fake_prefetch)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["where", "Boston, MA", "--geometry"])
+    assert result.exit_code != 0
+
+
 def test_where_ambiguous_shows_hint(monkeypatch):
     """When multiple matches exist, the human view hints at --all."""
     alameda_ca = Division(

@@ -149,6 +149,36 @@ def _suggest_categories(type_: str, bbox, release, target: str, n: int = 3):
     return [v for _, v in scored[:n]]
 
 
+def _no_match_help(query: str) -> str:
+    """Build an actionable message when a place query resolves to nothing.
+
+    Retries once with qualifiers dropped (the bare name). If that resolves,
+    names the candidate so the caller has a recovery path; otherwise explains
+    the neighborhood/parent fallback. Covers the two common agent failures:
+    neighborhood names ("Williamsburg, Brooklyn") and over-qualified queries
+    ("Brooklyn, New York") that the divisions index can't match directly.
+    """
+    parts = [p.strip() for p in query.split(",")]
+    name = parts[0]
+    qualifiers = [p for p in parts[1:] if p]
+    base = f"No division found for {query!r}."
+    if qualifiers:
+        fallback = resolve(name)
+        if fallback:
+            top = fallback[0]
+            return (
+                f"{base} The qualifier {', '.join(qualifiers)!r} matched "
+                f"nothing, but {name!r} alone resolves to "
+                f"{_describe_division(top)}. Use that, `containing LAT,LON`, "
+                f"or `--bbox`."
+            )
+    return (
+        f"{base} It may be a neighborhood not in Overture's divisions index. "
+        f"Try a parent locality (city → state → country), `containing "
+        f"LAT,LON`, or `--bbox`."
+    )
+
+
 def _resolve_in_place(in_place: str):
     """Resolve a --in query to a Division, warning to stderr on ambiguity.
 
@@ -159,7 +189,7 @@ def _resolve_in_place(in_place: str):
     """
     matches = resolve(in_place)
     if not matches:
-        raise click.UsageError(f"No division found for {in_place!r}")
+        raise click.UsageError(_no_match_help(in_place))
     picked = matches[0]
     if len(matches) > 1:
         alt = matches[1]
@@ -241,6 +271,17 @@ def _walk_group(group: click.Group, prefix: str = "") -> list[dict]:
 EARTH_AREA_SQ_DEG = 64800
 # Threshold (fraction of Earth) above which we warn about a large bbox.
 LARGE_BBOX_THRESHOLD = 0.01  # 1% of Earth
+
+# Overture type -> convenience verb that covers it with friendlier flags.
+# Used by `download` to nudge agents toward the higher-level verbs.
+TYPE_TO_VERB = {
+    "place": "places",
+    "segment": "roads",
+    "building": "buildings",
+    "address": "addresses",
+    "water": "water",
+    "land_use": "landuse",
+}
 
 
 def _print_banner():
@@ -399,6 +440,16 @@ def download(
     # Mutual exclusion check
     if bbox is not None and in_place is not None:
         raise click.UsageError("--bbox and --in are mutually exclusive")
+
+    # Steering hint: if a convenience verb covers this type, nudge toward it.
+    verb = TYPE_TO_VERB.get(type_)
+    if verb is not None:
+        click.secho(
+            f"[overturemaps] Tip: the '{verb}' verb covers -t {type_} with "
+            f"friendlier flags (e.g. --class/--category) and the same output. "
+            f"See `overturemaps {verb} --help`.",
+            fg="bright_black", err=True,
+        )
 
     # Resolve --in to bbox
     if in_place is not None:
@@ -562,19 +613,27 @@ def gers(ctx, gers_id, output_format, output, connect_timeout, request_timeout):
 @click.argument("query", type=str)
 @click.option("--all", "show_all", is_flag=True, default=False,
               help="Show all matching divisions, not just the best one.")
+@click.option("--geometry", "--geojson", "geometry", is_flag=True, default=False,
+              help="Emit the division's polygon as a GeoJSON Feature on stdout "
+                   "(for clipping/spatial joins). Replaces `download -t "
+                   "division_area`.")
 @click.pass_context
-def where(ctx, query, show_all):
+def where(ctx, query, show_all, geometry):
     """Resolve a place name to an Overture division feature."""
     json_mode = ctx.obj.get("json", False)
     matches = resolve(query)
     if not matches:
-        msg = f"No division found for {query!r}"
+        msg = _no_match_help(query)
         if json_mode:
             _emit_error_json(msg, code="no_match")
         else:
             click.secho(msg, fg="red", err=True)
         ctx.exit(1)
     pick = matches[0]
+
+    if geometry:
+        _emit_division_geometry(ctx, pick)
+        return
 
     if json_mode:
         payload = pick.as_dict()
@@ -1077,6 +1136,101 @@ def roads(in_place, bbox, road_class, where_exprs, output_format, output, releas
               help="Resolve a place name to a bbox via the divisions index.")
 @click.option("--bbox", required=False, type=BboxParamType(),
               help="Bounding box xmin,ymin,xmax,ymax. Mutually exclusive with --in.")
+@click.option("--class", "water_class", required=False, type=str,
+              help="Shortcut for --where class=VAL (e.g. ocean, lake, river, stream)")
+@click.option("--where", "where_exprs", multiple=True)
+@click.option("-f", "output_format",
+              type=click.Choice(["geojson", "geojsonseq", "geoparquet"]),
+              default="geojsonseq", show_default=True)
+@click.option("-o", "--output", required=False, type=click.Path())
+@click.option("-r", "--release", default=None, callback=validate_release,
+              required=False)
+def water(in_place, bbox, water_class, where_exprs, output_format, output, release):
+    """Download water features (oceans, lakes, rivers, ...) in a named place."""
+    if bbox is not None and in_place is not None:
+        raise click.UsageError("--bbox and --in are mutually exclusive")
+    if bbox is None and in_place is None:
+        raise click.UsageError("Provide --in or --bbox")
+    if in_place is not None:
+        division = _resolve_in_place(in_place)
+        bbox = list(division.bbox)
+    else:
+        bbox = list(bbox)
+
+    try:
+        filters = [parse_where_expr(e) for e in where_exprs]
+    except ValueError as e:
+        raise click.UsageError(str(e))
+    if water_class is not None:
+        filters.append(ParsedFilter(key="class", op="=", value=water_class))
+
+    if output_format == "geoparquet" and output is None:
+        raise click.UsageError("Output file (-o/--output) is required for geoparquet")
+    output_file = sys.stdout if output is None else output
+
+    reader = _safe_reader(
+        "water", bbox, release, None, None, True,
+        where_filters=filters or None,
+    )
+    if reader is None:
+        return
+    with get_writer(output_format, output_file, schema=reader.schema) as writer:
+        copy(reader, writer)
+
+
+@cli.command()
+@click.option("--in", "in_place", required=False, type=str,
+              help="Resolve a place name to a bbox via the divisions index.")
+@click.option("--bbox", required=False, type=BboxParamType(),
+              help="Bounding box xmin,ymin,xmax,ymax. Mutually exclusive with --in.")
+@click.option("--class", "landuse_class", required=False, type=str,
+              help="Shortcut for --where class=VAL "
+                   "(e.g. commercial, residential, recreation, agriculture)")
+@click.option("--where", "where_exprs", multiple=True)
+@click.option("-f", "output_format",
+              type=click.Choice(["geojson", "geojsonseq", "geoparquet"]),
+              default="geojsonseq", show_default=True)
+@click.option("-o", "--output", required=False, type=click.Path())
+@click.option("-r", "--release", default=None, callback=validate_release,
+              required=False)
+def landuse(in_place, bbox, landuse_class, where_exprs, output_format, output, release):
+    """Download land-use polygons (residential, commercial, ...) in a named place."""
+    if bbox is not None and in_place is not None:
+        raise click.UsageError("--bbox and --in are mutually exclusive")
+    if bbox is None and in_place is None:
+        raise click.UsageError("Provide --in or --bbox")
+    if in_place is not None:
+        division = _resolve_in_place(in_place)
+        bbox = list(division.bbox)
+    else:
+        bbox = list(bbox)
+
+    try:
+        filters = [parse_where_expr(e) for e in where_exprs]
+    except ValueError as e:
+        raise click.UsageError(str(e))
+    if landuse_class is not None:
+        filters.append(ParsedFilter(key="class", op="=", value=landuse_class))
+
+    if output_format == "geoparquet" and output is None:
+        raise click.UsageError("Output file (-o/--output) is required for geoparquet")
+    output_file = sys.stdout if output is None else output
+
+    reader = _safe_reader(
+        "land_use", bbox, release, None, None, True,
+        where_filters=filters or None,
+    )
+    if reader is None:
+        return
+    with get_writer(output_format, output_file, schema=reader.schema) as writer:
+        copy(reader, writer)
+
+
+@cli.command()
+@click.option("--in", "in_place", required=False, type=str,
+              help="Resolve a place name to a bbox via the divisions index.")
+@click.option("--bbox", required=False, type=BboxParamType(),
+              help="Bounding box xmin,ymin,xmax,ymax. Mutually exclusive with --in.")
 @click.option("--street", required=False, type=str,
               help="Street name (case-insensitive substring). Example: --street Fountain")
 @click.option("--number", required=False, type=str,
@@ -1405,6 +1559,38 @@ def _polygon_contains(
 
 
 _polygon_cache: dict[str, object] = {}
+
+
+def _emit_division_geometry(ctx, division) -> None:
+    """Fetch `division`'s division_area polygon and print it as a GeoJSON
+    Feature on stdout. Raises click.UsageError if no polygon is available.
+
+    Reuses the same `_prefetch_polygons` / division_area S3 path as
+    `containing`, so callers get a boundary for clipping or spatial joins
+    without resorting to `download -t division_area`.
+    """
+    from shapely.geometry import mapping
+
+    release = get_latest_release()
+    _prefetch_polygons([division.id], 0.0, 0.0, release)
+    poly = _polygon_cache.get(division.id)
+    if poly is None:
+        raise click.UsageError(
+            f"No division_area polygon found for "
+            f"{_describe_division(division)} (id {division.id})."
+        )
+    feature = {
+        "type": "Feature",
+        "geometry": mapping(poly),
+        "properties": {
+            "id": division.id,
+            "name": division.name,
+            "subtype": division.subtype,
+            "country": division.country,
+            "region": division.region,
+        },
+    }
+    _emit_json(ctx, feature)
 
 
 @cli.command()

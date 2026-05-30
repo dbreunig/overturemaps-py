@@ -54,7 +54,7 @@ overturemaps places --in "Boston, MA" --category restaurant -f geojsonseq -o out
 overturemaps places --in "Brooklyn" --category hospital -f geojsonseq -o hospitals.jsonl
 
 # Coffee shops in Brooklyn, with high source confidence
-overturemaps places --in "Brooklyn" --category coffee_shop --where confidence>0.8 \
+overturemaps places --in "Brooklyn" --category coffee_shop --where 'confidence>0.8' \
   -f geojsonseq -o brooklyn_coffee.jsonl
 
 # Hotels in Berlin (using a country code qualifier)
@@ -71,20 +71,20 @@ overturemaps at 40.7484,-73.9857 -t place --category pharmacy --radius 250 -n 20
 overturemaps categories -t place --in "Brooklyn" --top 30
 
 # How many buildings in Manhattan are at least 100m tall? Decide before downloading.
-overturemaps count -t building --in "Manhattan" --where height>=100
+overturemaps count -t building --in "Manhattan" --where 'height>=100'
 
 # Peek at five matching features before committing to the full pull
-overturemaps sample -t building --in "Manhattan" --where height>=100 -n 5
+overturemaps sample -t building --in "Manhattan" --where 'height>=100' -n 5
 ```
 
 ### Buildings with attributes
 
 ```bash
 # Tall buildings in Manhattan, as GeoParquet for analytics
-overturemaps buildings --in "Manhattan" --where height>150 -f geoparquet -o tall.parquet
+overturemaps buildings --in "Manhattan" --where 'height>150' -f geoparquet -o tall.parquet
 
 # Skyscrapers (≥40 floors) in Chicago
-overturemaps buildings --in "Chicago, IL" --where num_floors>=40 -f geojsonseq -o skyscrapers.jsonl
+overturemaps buildings --in "Chicago, IL" --where 'num_floors>=40' -f geojsonseq -o skyscrapers.jsonl
 
 # Buildings of a specific subtype
 overturemaps buildings --in "Boston, MA" --where subtype=education -f geojsonseq -o schools.jsonl
@@ -103,7 +103,36 @@ overturemaps roads --in "Berlin, DE" --where "class in [primary,secondary]" \
 # Footways and cycleways in central Amsterdam
 overturemaps roads --in "Amsterdam, NL" --where "class in [footway,cycleway]" \
   -f geojsonseq -o amsterdam_paths.jsonl
+
+# `roads` covers every transportation segment — use --class for bike paths too
+overturemaps roads --in "Alameda County, CA" --class cycleway \
+  -f geojsonseq -o bikepaths.jsonl
 ```
+
+### Water and land use
+
+```bash
+# Lakes near Minneapolis
+overturemaps water --in "Minneapolis, MN" --class lake -f geojsonseq -o lakes.jsonl
+
+# Residential land-use polygons in Brooklyn
+overturemaps landuse --in "Brooklyn, NY" --class residential \
+  -f geojsonseq -o residential.jsonl
+```
+
+Both `water` and `landuse` mirror `roads`: pass `--class` (e.g. `ocean`,
+`lake`, `river` for water; `commercial`, `residential`, `recreation`,
+`agriculture` for land use) or any `--where` filter.
+
+### Boundary polygons
+
+```bash
+# Get a division's polygon as a GeoJSON Feature (for clipping / spatial joins)
+overturemaps where "Alameda County, CA" --geometry > county.geojson
+```
+
+`where --geometry` (alias `--geojson`) is the supported way to fetch a
+boundary — no need for `download -t division_area`.
 
 ### Address lookups
 
@@ -262,7 +291,7 @@ overturemaps --json count -t place --in "Boston, MA" --where categories.primary=
 Emit the first N features matching a query. Defaults to `geojsonseq` and N=10.
 
 ```bash
-overturemaps sample -t building --in "Brooklyn" --where height>100 -n 5
+overturemaps sample -t building --in "Brooklyn" --where 'height>100' -n 5
 overturemaps sample -t place --in "Brooklyn" --where categories.primary=coffee_shop -n 3
 ```
 
@@ -294,12 +323,14 @@ Agents read this once to learn the CLI surface.
 overturemaps --json capabilities | jq '.commands[].name'
 ```
 
-#### `places`, `buildings`, `roads`, `addresses`
+#### `places`, `buildings`, `roads`, `addresses`, `water`, `landuse`
 
 Intent verbs that wrap `download` with a familiar shape. Each accepts either
 `--in "Place Name"` (resolved via the divisions index) or `--bbox xmin,ymin,xmax,ymax`.
 `--category` / `--class` / `--street` desugar to common `--where` filters,
-and `--where` is still available for advanced predicates.
+and `--where` is still available for advanced predicates. `water` and `landuse`
+take `--class` just like `roads`. Running `download -t TYPE` for a type covered
+by one of these verbs prints a one-line stderr tip pointing at the verb.
 
 ```bash
 # POIs by category (named place)
@@ -309,8 +340,8 @@ overturemaps places --in "Brooklyn" --category hospital -f geojsonseq -o hospita
 overturemaps places --bbox=-122.295,37.778,-122.265,37.800 --category coffee_shop
 
 # Buildings filtered by attribute
-overturemaps buildings --in "Manhattan" --where height>150 -f geojsonseq -o tall.jsonl
-overturemaps buildings --in "Boston, MA" --where num_floors>=10 --where height>30 -f geoparquet -o tall.parquet
+overturemaps buildings --in "Manhattan" --where 'height>150' -f geojsonseq -o tall.jsonl
+overturemaps buildings --in "Boston, MA" --where 'num_floors>=10' --where 'height>30' -f geoparquet -o tall.parquet
 
 # Roads by class
 overturemaps roads --in "Texas, US" --class motorway -f geojsonseq -o tx_highways.jsonl
@@ -319,6 +350,10 @@ overturemaps roads --in "Berlin, DE" --where "class in [primary,secondary]" -f g
 # Addresses by street (case-insensitive substring on --street; --number / --postcode are exact)
 overturemaps addresses --in "Alameda, US-CA" --street Fountain --number 1234
 overturemaps addresses --in "Brookline, MA" --street "Main St"
+
+# Water and land use by class
+overturemaps water --in "Minneapolis, MN" --class lake -f geojsonseq -o lakes.jsonl
+overturemaps landuse --in "Brooklyn, NY" --class residential -f geojsonseq -o zoning.jsonl
 ```
 
 `places` includes a zero-result hint: when `--category X` (or
@@ -539,6 +574,94 @@ To run the benchmarks locally:
 uv sync --group dev
 pytest benchmarks/ -v
 ```
+
+## Agent-Usability Evals
+
+The eval suite measures whether an AI agent can answer real geospatial questions
+using the CLI's high-level verbs — without falling back to the low-level `download`
+command and without triggering CLI errors. The goal is to drive `download` usage
+toward zero for any question a convenience verb already covers.
+
+### Running the evals
+
+Requires the `claude` CLI on PATH and network access to Overture S3. The first run
+warms the divisions index cache (one-time, ~30 seconds).
+
+```bash
+# Full batch: 10 questions × 2 repeats
+uv run python -m evals.runner --model sonnet
+uv run python -m evals.score
+uv run python -m evals.synthesize --model opus
+
+# Single-question smoke test (cheap sanity check)
+uv run python -m evals.runner --smoke --model sonnet
+uv run python -m evals.score
+```
+
+Each run produces three artifacts:
+
+| Artifact | What it contains |
+|---|---|
+| `evals/runs/<id>__r<n>/transcript.jsonl` | Full Claude Code session transcript |
+| `evals/runs/<id>__r<n>/shim.log` | Every `overturemaps` call with exit codes |
+| `evals/runs/<id>__r<n>/record.json` | Scored metrics for that run |
+| `evals/report.md` | Ranked failure clusters + per-question rates |
+| `evals/proposals.json` | Concrete CLI/skill/docs improvement proposals |
+
+### Question bank
+
+Questions live in `evals/questions.yaml` and are organized into five tiers of
+increasing complexity:
+
+| Tier | What it tests |
+|---|---|
+| 1 | Single-verb lookups (`where`, `count`) |
+| 2 | Filtered downloads with attribute predicates |
+| 3 | Point-query primitives (`at`, `containing`) |
+| 4 | Types with no convenience verb — `download` is the right answer |
+| 5 | Multi-layer spatial joins requiring two verbs plus in-process computation |
+
+Each question carries a `download_is_legitimate` flag. When `false`, any
+`download` call is scored as an agent failure. When `true` (tier 4 questions
+with no convenience verb), a `download` is a coverage-gap candidate — a signal
+to add a new verb rather than a failure to penalize the agent.
+
+### Adding questions
+
+Add an entry to `evals/questions.yaml`:
+
+```yaml
+- id: my-new-question          # stable slug, no '__'
+  question: "Natural-language prompt handed verbatim to the agent"
+  tier: 2
+  download_is_legitimate: false
+  target_type: place
+  place: "Brooklyn, US-NY"     # optional; used by the cost guard to bound S3 reads
+  notes: "Ideal path: ..."
+```
+
+### Reading the output
+
+`evals/report.md` summarises every run after `just eval` completes. The key
+columns in the per-question table:
+
+- **Download** — fraction of runs where any `download` was issued
+- **Unnecessary DL** — fraction where `download` was used when a verb existed
+- **Error** — fraction where at least one CLI call exited non-zero
+- **Completed** — fraction where the agent produced a final answer
+
+`evals/proposals.json` contains LLM-generated, evidence-backed suggestions
+(targeting `cli`, `skill`, `docs`, or `hint`) derived from the failure clusters.
+
+### How it works
+
+The runner sets up an isolated working directory per run, installs the Overture
+skill so the agent can discover the CLI, and puts a logging shim first on PATH.
+The shim intercepts every `overturemaps` call, records the arguments and exit
+code to `shim.log`, then forwards the call to the real binary. After all runs
+complete, the scorer reads each `shim.log` and transcript to produce
+`record.json`, and the synthesizer aggregates those records into the final report
+and proposals.
 
 ## Development
 

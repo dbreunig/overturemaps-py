@@ -117,7 +117,12 @@ def parse_where_expr(expr: str) -> ParsedFilter:
             best_op = op
 
     if best_op is None:
-        raise ValueError(f"Could not parse --where expression: {expr!r}")
+        raise ValueError(
+            f"Filter {expr!r} has no operator. Use K OP V, e.g. "
+            f"--where 'height>150'. If you typed an unquoted > or <, your "
+            f"shell redirected it to a file — wrap the whole expression in "
+            f"single quotes."
+        )
 
     key = expr[:best_idx].strip()
     value_raw = expr[best_idx + len(best_op):].strip()

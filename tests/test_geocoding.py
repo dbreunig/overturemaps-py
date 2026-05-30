@@ -153,6 +153,20 @@ def test_best_match_country_uk_alias(fake_index):
     assert pick.region == "GB-LIN"
 
 
+def test_best_match_full_state_name_qualifier(fake_index):
+    """'Boston, Massachusetts' should resolve the same as 'Boston, MA'."""
+    pick_full = best_match("Boston, Massachusetts")
+    pick_short = best_match("Boston, MA")
+    assert pick_full.id == pick_short.id
+    assert pick_full.region == "US-MA"
+
+
+def test_best_match_full_state_name_case_insensitive(fake_index):
+    """State names are matched case-insensitively."""
+    pick = best_match("Alameda, california")
+    assert pick.region == "US-CA"
+
+
 def test_best_match_unknown_qualifier_rejects(fake_index):
     """An unknown qualifier should still narrow (and reject) — not be silently dropped."""
     with pytest.raises(LookupError):

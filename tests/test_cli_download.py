@@ -24,6 +24,45 @@ class _DummyReader:
     schema = object()
 
 
+def test_download_hints_verb_for_covered_type(monkeypatch):
+    """`download -t place` should nudge toward the friendlier `places` verb."""
+    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2024-11-13.0")
+    monkeypatch.setattr(
+        "overturemaps.cli.record_batch_reader", lambda *a, **k: _DummyReader()
+    )
+    monkeypatch.setattr("overturemaps.cli.get_writer", lambda *a, **k: _DummyWriter())
+    monkeypatch.setattr("overturemaps.cli.copy", lambda *a, **k: None)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, [
+            "download", "-f", "geojsonseq", "-t", "place",
+            "--bbox", "-71.07,42.35,-71.06,42.36",
+        ])
+        assert result.exit_code == 0, result.output
+        assert "places" in result.output
+        assert "Tip" in result.output
+
+
+def test_download_no_hint_for_uncovered_type(monkeypatch):
+    """A type with no convenience verb (infrastructure) gets no tip."""
+    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2024-11-13.0")
+    monkeypatch.setattr(
+        "overturemaps.cli.record_batch_reader", lambda *a, **k: _DummyReader()
+    )
+    monkeypatch.setattr("overturemaps.cli.get_writer", lambda *a, **k: _DummyWriter())
+    monkeypatch.setattr("overturemaps.cli.copy", lambda *a, **k: None)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, [
+            "download", "-f", "geojsonseq", "-t", "infrastructure",
+            "--bbox", "-71.07,42.35,-71.06,42.36",
+        ])
+        assert result.exit_code == 0, result.output
+        assert "Tip" not in result.output
+
+
 def test_download_saves_absolute_output_path(monkeypatch):
     """`download` stores absolute output path in saved state."""
 
@@ -352,4 +391,4 @@ def test_download_malformed_where_clean_error():
     )
     assert result.exit_code != 0
     # The error message comes from parse_where_expr's ValueError
-    assert "Could not parse" in result.output
+    assert "has no operator" in result.output

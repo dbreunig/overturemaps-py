@@ -75,8 +75,20 @@ class TestParseWhereExpr:
         assert f.value == -70
 
     def test_missing_operator_raises(self):
-        with pytest.raises(ValueError, match="Could not parse"):
+        with pytest.raises(ValueError, match="no operator"):
             parse_where_expr("just_a_key")
+
+    def test_missing_operator_explains_shell_redirection(self):
+        # A bare key like "height" reaches the parser when the shell ate an
+        # unquoted `>150` as a redirection. The error must name the key,
+        # show the K OP V form, and explain the single-quote fix.
+        with pytest.raises(ValueError) as exc:
+            parse_where_expr("height")
+        msg = str(exc.value)
+        assert "height" in msg
+        assert "height>150" in msg or "K OP V" in msg
+        assert "single-quote" in msg or "single quote" in msg
+        assert "redirect" in msg.lower()
 
     def test_empty_value_raises(self):
         with pytest.raises(ValueError, match="empty value"):
