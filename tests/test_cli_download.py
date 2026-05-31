@@ -44,8 +44,8 @@ def test_download_hints_verb_for_covered_type(monkeypatch):
         assert "Tip" in result.output
 
 
-def test_download_no_hint_for_uncovered_type(monkeypatch):
-    """A type with no convenience verb (infrastructure) gets no tip."""
+def test_download_infrastructure_hint_points_to_places(monkeypatch):
+    """infrastructure downloads get a hint that transit stops are place features."""
     monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2024-11-13.0")
     monkeypatch.setattr(
         "overturemaps.cli.record_batch_reader", lambda *a, **k: _DummyReader()
@@ -60,7 +60,44 @@ def test_download_no_hint_for_uncovered_type(monkeypatch):
             "--bbox", "-71.07,42.35,-71.06,42.36",
         ])
         assert result.exit_code == 0, result.output
-        assert "Tip" not in result.output
+        assert "bus_stop" in result.output
+        assert "places" in result.output
+
+
+def test_download_hint_is_actionable_command(monkeypatch):
+    """Hint for a covered type shows a concrete runnable command, not just --help."""
+    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2024-11-13.0")
+    monkeypatch.setattr(
+        "overturemaps.cli.record_batch_reader", lambda *a, **k: _DummyReader()
+    )
+    monkeypatch.setattr("overturemaps.cli.get_writer", lambda *a, **k: _DummyWriter())
+    monkeypatch.setattr("overturemaps.cli.copy", lambda *a, **k: None)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, [
+            "download", "-f", "geojsonseq", "-t", "segment",
+            "--in", "Alameda County, CA",
+            "--where", "class=cycleway",
+        ])
+        assert result.exit_code == 0, result.output
+        assert "overturemaps roads" in result.output
+        assert "--in" in result.output
+        assert "--class cycleway" in result.output
+        assert "--help" not in result.output
+
+
+def test_download_division_area_redirect(monkeypatch):
+    """division_area downloads now raise a UsageError pointing to `boundary`."""
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, [
+            "download", "-f", "geojsonseq", "-t", "division_area",
+            "--in", "Alameda County, CA",
+        ])
+        assert result.exit_code == 2, result.output
+        assert "boundary" in result.output
+        assert "not downloadable" in result.output
 
 
 def test_download_saves_absolute_output_path(monkeypatch):

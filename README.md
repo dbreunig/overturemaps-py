@@ -128,11 +128,16 @@ Both `water` and `landuse` mirror `roads`: pass `--class` (e.g. `ocean`,
 
 ```bash
 # Get a division's polygon as a GeoJSON Feature (for clipping / spatial joins)
+overturemaps boundary "Alameda County, CA" > county.geojson
+
+# Longer form: where --geometry does the same thing
 overturemaps where "Alameda County, CA" --geometry > county.geojson
 ```
 
-`where --geometry` (alias `--geojson`) is the supported way to fetch a
-boundary — no need for `download -t division_area`.
+`boundary` is the dedicated verb for fetching a division's polygon. It accepts
+any place name that `where` resolves, including neighborhood+city forms like
+`"Brooklyn, NY"`. `where --geometry` (alias `--geojson`) is an equivalent
+long-form. Using `download -t division_area` will now error with a redirect.
 
 ### Address lookups
 
@@ -276,6 +281,24 @@ stderr warning naming the picked division and the top alternative, pointing
 at `where --all` for full inspection. Do not silence stderr — that warning
 is the only signal that the resolver made a judgment call.
 
+`where` (and all data commands) support neighborhood+city names like
+`"Brooklyn, NY"`: when the exact string isn't in the divisions index, the
+resolver retries scoped to the parent locality's region, or falls back to
+the parent's bbox with a yellow stderr note.
+
+#### `boundary TEXT`
+
+Emit a division's polygon as a GeoJSON Feature on stdout, for clipping or
+spatial joins. Accepts the same place names as `where`.
+
+```bash
+overturemaps boundary "Alameda County, CA" > county.geojson
+overturemaps boundary "Brooklyn, NY" | jq '.properties'
+```
+
+`download -t division_area` is no longer supported — `boundary` is the
+replacement.
+
 #### `count`
 
 Row count for a query without downloading. The cheap preview that should
@@ -330,7 +353,12 @@ Intent verbs that wrap `download` with a familiar shape. Each accepts either
 `--category` / `--class` / `--street` desugar to common `--where` filters,
 and `--where` is still available for advanced predicates. `water` and `landuse`
 take `--class` just like `roads`. Running `download -t TYPE` for a type covered
-by one of these verbs prints a one-line stderr tip pointing at the verb.
+by one of these verbs prints a one-line stderr tip pointing at the verb. All
+data verbs accept a trailing `--json` flag silently (they already emit GeoJSON).
+
+Transit stops (`bus_stop`, `bus_station`, `train_station`) are `place` features —
+`download -t infrastructure --where class=bus_stop` will error and redirect to
+`places --category bus_stop`.
 
 ```bash
 # POIs by category (named place)

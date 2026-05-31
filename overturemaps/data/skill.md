@@ -143,7 +143,7 @@ overturemaps landuse --in "Brooklyn, NY" --class residential \
 ### 15. Bus stops and other transit POIs
 ```bash
 # Transit stops are PLACES (categories.primary), not infrastructure.
-overturemaps places --in "Williamsburg, Brooklyn" --category bus_stop \
+overturemaps places --in "Williamsburg, NY" --category bus_stop \
   -f geojsonseq -o busstops.jsonl
 ```
 

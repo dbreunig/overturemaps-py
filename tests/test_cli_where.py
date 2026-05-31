@@ -72,6 +72,20 @@ _WILLIAMSBURG_VA = Division(
     bbox=(-76.75, 37.25, -76.66, 37.32),
 )
 
+_WILLIAMSBURG_NY = Division(
+    id="williamsburg-ny", name="Williamsburg", subtype="microhood",
+    country="US", region="US-NY",
+    admin_level=None, population=None, parent_division_id="brooklyn",
+    bbox=(-73.963, 40.706, -73.944, 40.724),
+)
+
+_BROOKLYN = Division(
+    id="brooklyn", name="Brooklyn", subtype="locality",
+    country="US", region="US-NY",
+    admin_level=8, population=2736074, parent_division_id="nyc",
+    bbox=(-74.04, 40.57, -73.83, 40.74),
+)
+
 
 def test_where_no_match_suggests_bare_name(monkeypatch):
     """A neighborhood-qualified query that fails should name the bare-name
@@ -145,6 +159,50 @@ def test_where_geojson_alias_flag(monkeypatch):
     assert result.exit_code == 0, result.output
     data = json.loads(result.output)
     assert data["type"] == "Feature"
+
+
+def test_resolve_in_place_falls_back_via_parent_region(monkeypatch):
+    """'Williamsburg, Brooklyn': qualifier resolves as locality → retry with its region."""
+    def fake_resolve(q):
+        if q == "Williamsburg, Brooklyn":
+            return []
+        if q == "Brooklyn":
+            return [_BROOKLYN]
+        if q == "Williamsburg, US-NY":
+            return [_WILLIAMSBURG_NY]
+        return []
+
+    monkeypatch.setattr("overturemaps.cli.resolve", fake_resolve)
+    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2025-12-17.0")
+    monkeypatch.setattr("overturemaps.cli.count_rows", lambda *a, **k: 7)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["count", "-t", "place", "--in", "Williamsburg, Brooklyn"])
+    assert result.exit_code == 0, result.output
+    # Warning names the parent that was used for resolution.
+    assert "Brooklyn" in result.output
+
+
+def test_resolve_in_place_falls_back_to_parent_bbox(monkeypatch):
+    """When the name isn't found in the parent's region, use the parent's bbox."""
+    def fake_resolve(q):
+        if q == "SoHo, Brooklyn":
+            return []
+        if q == "Brooklyn":
+            return [_BROOKLYN]
+        if q == "SoHo, US-NY":
+            return []          # Not in the index at all
+        return []
+
+    monkeypatch.setattr("overturemaps.cli.resolve", fake_resolve)
+    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2025-12-17.0")
+    monkeypatch.setattr("overturemaps.cli.count_rows", lambda *a, **k: 42)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["count", "-t", "place", "--in", "SoHo, Brooklyn"])
+    # Falls back to Brooklyn's bbox rather than failing outright.
+    assert result.exit_code == 0, result.output
+    assert "Brooklyn" in result.output
 
 
 def test_where_geometry_no_polygon_errors(monkeypatch):

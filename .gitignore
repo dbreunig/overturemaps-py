@@ -140,6 +140,9 @@ cython_debug/
 # Benchmark results (machine-specific)
 results/
 
+# macOS
+.DS_Store
+
 # Agent-usability eval artifacts
 evals/runs/
 evals/report.md

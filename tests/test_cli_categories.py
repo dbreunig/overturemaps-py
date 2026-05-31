@@ -3,6 +3,7 @@
 import json
 
 import pyarrow as pa
+import pytest
 from click.testing import CliRunner
 
 from overturemaps.cli import cli
@@ -50,3 +51,27 @@ def test_categories_returns_top_values(monkeypatch):
         {"value": "cafe", "count": 7},
         {"value": "bar", "count": 3},
     ]
+
+
+def test_categories_non_place_type_with_verb_gives_helpful_error(monkeypatch):
+    """`categories -t land_use` should explain `class` and point to the verb."""
+    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2025-12-17.0")
+    runner = CliRunner()
+    result = runner.invoke(cli, [
+        "categories", "-t", "land_use", "--bbox", "-71.1,42.3,-71.0,42.4",
+    ])
+    assert result.exit_code != 0
+    assert "class" in result.output
+    assert "landuse" in result.output
+    assert "schema" in result.output
+
+
+def test_categories_non_place_type_without_verb_gives_schema_hint(monkeypatch):
+    """`categories -t infrastructure` should point to schema."""
+    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2025-12-17.0")
+    runner = CliRunner()
+    result = runner.invoke(cli, [
+        "categories", "-t", "infrastructure", "--bbox", "-71.1,42.3,-71.0,42.4",
+    ])
+    assert result.exit_code != 0
+    assert "schema" in result.output

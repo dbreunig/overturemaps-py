@@ -97,7 +97,7 @@ def build_index(release: str) -> Path:
     """Read divisions data from S3 for `release` and write the local index parquet."""
     div_cols = [
         "id", "names", "subtype", "class", "country", "region",
-        "admin_level", "population", "parent_division_id",
+        "admin_level", "population", "parent_division_id", "bbox",
     ]
     area_cols = ["division_id", "bbox"]
 
@@ -112,6 +112,10 @@ def build_index(release: str) -> Path:
     # feedback warrants the complexity.
     names_col = div.column("names").combine_chunks()
     name_primary = pc.struct_field(names_col, "primary")
+
+    # Extract the division's own bbox (present for all features, including
+    # point-geometry divisions like microhoods that have no division_area row).
+    div_bbox = div.column("bbox").combine_chunks()
 
     # Each division can have multiple division_area rows; combine to a single
     # bbox by taking min(xmin), min(ymin), max(xmax), max(ymax) per division_id.
@@ -149,10 +153,60 @@ def build_index(release: str) -> Path:
         "admin_level": div.column("admin_level"),
         "population": div.column("population"),
         "parent_division_id": _as_string(div.column("parent_division_id")),
+        # Stash the division's own bbox so point-geometry divisions (microhoods,
+        # some neighborhoods) survive the left join when no division_area exists.
+        "own_xmin": pc.struct_field(div_bbox, "xmin"),
+        "own_ymin": pc.struct_field(div_bbox, "ymin"),
+        "own_xmax": pc.struct_field(div_bbox, "xmax"),
+        "own_ymax": pc.struct_field(div_bbox, "ymax"),
     })
 
-    # Inner join on id <-> division_id
-    joined = div_flat.join(bbox_agg, keys="id", right_keys="division_id", join_type="inner")
+    # Left outer join: keep every division even if it has no division_area polygon.
+    # Divisions without an area (e.g. point-geometry microhoods) will have null
+    # values for the bbox_* columns from the right side.
+    joined = div_flat.join(bbox_agg, keys="id", right_keys="division_id", join_type="left outer")
+
+    # Coalesce: prefer the area-derived bbox; fall back to the division's own bbox
+    # for point-geometry divisions that have no division_area row.
+    for area_col, own_col in [
+        ("bbox_xmin", "own_xmin"),
+        ("bbox_ymin", "own_ymin"),
+        ("bbox_xmax", "own_xmax"),
+        ("bbox_ymax", "own_ymax"),
+    ]:
+        coalesced = pc.if_else(
+            pc.is_valid(joined.column(area_col)),
+            joined.column(area_col),
+            joined.column(own_col),
+        )
+        idx = joined.schema.get_field_index(area_col)
+        joined = joined.set_column(idx, area_col, coalesced)
+    joined = joined.drop_columns(["own_xmin", "own_ymin", "own_xmax", "own_ymax"])
+
+    # Expand point-geometry bboxes so --in queries return a usable area.
+    # Divisions like microhoods and some neighborhoods have only a point in
+    # the source data; a degenerate bbox (xmin==xmax, ymin==ymax) would make
+    # --in return almost nothing. A ~1 km buffer gives a reasonable footprint
+    # for neighborhood-scale queries without over-expanding larger places.
+    _POINT_THRESHOLD = 0.001   # degrees; smaller than any real area polygon
+    _POINT_BUFFER = 0.009      # degrees; ≈ 1 km at mid-latitudes
+    xmin = joined.column("bbox_xmin")
+    xmax = joined.column("bbox_xmax")
+    ymin = joined.column("bbox_ymin")
+    ymax = joined.column("bbox_ymax")
+    is_point = pc.and_(
+        pc.less(pc.subtract(xmax, xmin), _POINT_THRESHOLD),
+        pc.less(pc.subtract(ymax, ymin), _POINT_THRESHOLD),
+    )
+    for col, op, base in [
+        ("bbox_xmin", pc.subtract, xmin),
+        ("bbox_ymin", pc.subtract, ymin),
+        ("bbox_xmax", pc.add,      xmax),
+        ("bbox_ymax", pc.add,      ymax),
+    ]:
+        buffered = op(base, _POINT_BUFFER)
+        idx = joined.schema.get_field_index(col)
+        joined = joined.set_column(idx, col, pc.if_else(is_point, buffered, base))
 
     out = index_path(release)
     out.parent.mkdir(parents=True, exist_ok=True)

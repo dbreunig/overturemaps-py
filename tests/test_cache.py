@@ -109,23 +109,39 @@ def _fake_division_table():
         ("primary", pa.string()),
         ("common", pa.map_(pa.string(), pa.string())),
     ])
+    bbox_type = pa.struct([
+        ("xmin", pa.float64()), ("ymin", pa.float64()),
+        ("xmax", pa.float64()), ("ymax", pa.float64()),
+    ])
     return pa.table({
-        "id": ["d1", "d2", "d3"],
+        "id": ["d1", "d2", "d3", "d4"],
         "names": pa.array(
             [
                 {"primary": "Boston", "common": None},
                 {"primary": "Cambridge", "common": None},
                 {"primary": "Boston", "common": None},
+                # d4: a microhood with only a point geometry — no division_area row
+                {"primary": "Williamsburg", "common": None},
             ],
             type=names_type,
         ),
-        "subtype": ["locality", "locality", "locality"],
-        "class": [None, None, None],
-        "country": ["US", "US", "GB"],
-        "region": ["US-MA", "US-MA", "GB-LIN"],
-        "admin_level": [8, 8, 8],
-        "population": [654776, 118000, 41000],
-        "parent_division_id": ["mass", "mass", "lincolnshire"],
+        "subtype": ["locality", "locality", "locality", "microhood"],
+        "class": [None, None, None, None],
+        "country": ["US", "US", "GB", "US"],
+        "region": ["US-MA", "US-MA", "GB-LIN", "US-NY"],
+        "admin_level": [8, 8, 8, None],
+        "population": [654776, 118000, 41000, None],
+        "parent_division_id": ["mass", "mass", "lincolnshire", "brooklyn"],
+        # The division's own bbox (point-geometry for d4)
+        "bbox": pa.array(
+            [
+                {"xmin": -71.19, "ymin": 42.23, "xmax": -70.99, "ymax": 42.40},
+                {"xmin": -71.16, "ymin": 42.36, "xmax": -71.07, "ymax": 42.42},
+                {"xmin":   0.00, "ymin": 53.00, "xmax":   0.20, "ymax": 53.10},
+                {"xmin": -73.9535, "ymin": 40.7146, "xmax": -73.9535, "ymax": 40.7146},
+            ],
+            type=bbox_type,
+        ),
     })
 
 
@@ -135,6 +151,7 @@ def _fake_division_area_table():
          ("xmax", pa.float64()), ("ymax", pa.float64())]
     )
     return pa.table({
+        # Only d1–d3 have area polygons; d4 (microhood) has none.
         "division_id": ["d1", "d2", "d3"],
         "bbox": pa.array(
             [
@@ -171,14 +188,64 @@ def test_build_index_writes_joined_parquet(monkeypatch, tmp_path):
 
     import pyarrow.parquet as pq
     table = pq.read_table(out_path)
-    # 3 input rows, all joined successfully
-    assert table.num_rows == 3
+    # All 4 rows present — including the microhood with no division_area
+    assert table.num_rows == 4
     assert set(table.column_names) >= {
         "id", "name_primary", "subtype", "country",
         "region", "admin_level", "population", "parent_division_id",
         "bbox_xmin", "bbox_ymin", "bbox_xmax", "bbox_ymax",
     }
     assert "name_common" not in table.column_names
+    # own_* helpers must be dropped from the final output
+    assert "own_xmin" not in table.column_names
+
+
+def test_build_index_point_division_uses_own_bbox_with_buffer(monkeypatch, tmp_path):
+    """A microhood with no division_area gets its point bbox buffered by ~1 km."""
+    from overturemaps import cache as cache_mod
+    import pyarrow.parquet as pq
+    import pyarrow.compute as pc
+
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    div_table = _fake_division_table()
+    area_table = _fake_division_area_table()
+
+    def fake_read_partition(theme, type_, release, columns):
+        return div_table.select(columns) if type_ == "division" else area_table.select(columns)
+
+    monkeypatch.setattr(cache_mod, "_read_partition_columns", fake_read_partition)
+    out_path = cache_mod.build_index("2025-12-17.0")
+
+    table = pq.read_table(out_path)
+    rows = table.filter(pc.equal(table.column("id"), "d4")).to_pydict()
+
+    # Point was at -73.9535, 40.7146; buffer of 0.009 deg should be applied.
+    assert rows["bbox_xmin"] == pytest.approx([-73.9535 - 0.009])
+    assert rows["bbox_ymin"] == pytest.approx([40.7146 - 0.009])
+    assert rows["bbox_xmax"] == pytest.approx([-73.9535 + 0.009])
+    assert rows["bbox_ymax"] == pytest.approx([40.7146 + 0.009])
+
+
+def test_build_index_polygon_division_not_buffered(monkeypatch, tmp_path):
+    """Divisions with a real area polygon must not be expanded by the point buffer."""
+    from overturemaps import cache as cache_mod
+    import pyarrow.parquet as pq
+    import pyarrow.compute as pc
+
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    div_table = _fake_division_table()
+    area_table = _fake_division_area_table()
+
+    def fake_read_partition(theme, type_, release, columns):
+        return div_table.select(columns) if type_ == "division" else area_table.select(columns)
+
+    monkeypatch.setattr(cache_mod, "_read_partition_columns", fake_read_partition)
+    out_path = cache_mod.build_index("2025-12-17.0")
+
+    table = pq.read_table(out_path)
+    rows = table.filter(pc.equal(table.column("id"), "d1")).to_pydict()
+    assert rows["bbox_xmin"] == pytest.approx([-71.19])
+    assert rows["bbox_xmax"] == pytest.approx([-70.99])
 
 
 def test_ensure_index_skips_when_current(monkeypatch, tmp_path):

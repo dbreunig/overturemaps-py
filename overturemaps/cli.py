@@ -185,10 +185,43 @@ def _resolve_in_place(in_place: str):
     - Raises click.UsageError if no division matches.
     - On multiple matches, prints a one-line stderr warning naming the
       picked division and the top alternative. Returns the picked one.
-    - Silent on a single match.
+    - When a qualifier is a locality name rather than a region code, retries
+      the original name scoped to that locality's region, then falls back to
+      the locality's own bbox — rather than failing outright.
+    - Silent on a single unambiguous match.
     """
     matches = resolve(in_place)
     if not matches:
+        # The qualifier may be a locality name ("Brooklyn") instead of a region
+        # code ("US-NY"). Try each qualifier as a place; if it resolves, scope
+        # the original name to that place's region and retry.
+        parts = [p.strip() for p in in_place.split(",")]
+        name, qualifiers = parts[0], [p for p in parts[1:] if p]
+        for qualifier in qualifiers:
+            parent_matches = resolve(qualifier)
+            if not parent_matches:
+                continue
+            parent = parent_matches[0]
+            if parent.region:
+                scoped = resolve(f"{name}, {parent.region}")
+                if scoped:
+                    result = scoped[0]
+                    click.secho(
+                        f"[overturemaps] {in_place!r} not in divisions index; "
+                        f"resolved via parent {qualifier!r} → "
+                        f"using {_describe_division(result)}",
+                        fg="yellow", err=True,
+                    )
+                    return result
+            # Couldn't find the name in the parent's region — use the parent's
+            # bbox directly so the query still runs over a bounded area.
+            click.secho(
+                f"[overturemaps] {in_place!r} not in divisions index; "
+                f"using parent {qualifier!r} "
+                f"({_describe_division(parent)}) bbox instead",
+                fg="yellow", err=True,
+            )
+            return parent
         raise click.UsageError(_no_match_help(in_place))
     picked = matches[0]
     if len(matches) > 1:
@@ -281,7 +314,34 @@ TYPE_TO_VERB = {
     "address": "addresses",
     "water": "water",
     "land_use": "landuse",
+    "division_area": "boundary",
 }
+
+
+def _suggest_verb_command(
+    verb: str, in_place, bbox, where_exprs, output_format, output
+) -> str:
+    """Build a concrete ready-to-run verb command from download flags."""
+    parts = [f"overturemaps {verb}"]
+    if in_place:
+        parts.append(f'--in "{in_place}"')
+    elif bbox is not None:
+        parts.append(f"--bbox {bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}")
+    leftover = []
+    for expr in (where_exprs or []):
+        if expr.startswith("categories.primary="):
+            parts.append(f"--category {expr.split('=', 1)[1]}")
+        elif expr.startswith("class="):
+            parts.append(f"--class {expr.split('=', 1)[1]}")
+        else:
+            leftover.append(expr)
+    for expr in leftover:
+        parts.append(f'--where "{expr}"')
+    if output_format:
+        parts.append(f"-f {output_format}")
+    if output:
+        parts.append(f"-o {output}")
+    return " ".join(parts)
 
 
 def _print_banner():
@@ -441,13 +501,42 @@ def download(
     if bbox is not None and in_place is not None:
         raise click.UsageError("--bbox and --in are mutually exclusive")
 
-    # Steering hint: if a convenience verb covers this type, nudge toward it.
+    # Steering hints: nudge toward the right tool when download isn't needed.
     verb = TYPE_TO_VERB.get(type_)
     if verb is not None:
+        suggestion = _suggest_verb_command(
+            verb, in_place, bbox, where_exprs, output_format, output
+        )
+        if type_ == "division_area":
+            raise click.UsageError(
+                f"division_area is not downloadable this way — "
+                f"for a boundary polygon run: {suggestion}"
+            )
         click.secho(
-            f"[overturemaps] Tip: the '{verb}' verb covers -t {type_} with "
-            f"friendlier flags (e.g. --class/--category) and the same output. "
-            f"See `overturemaps {verb} --help`.",
+            f"[overturemaps] Tip: try instead: {suggestion}",
+            fg="bright_black", err=True,
+        )
+    elif type_ == "infrastructure":
+        _TRANSIT_CLASSES = {"bus_stop", "bus_station", "train_station", "transit"}
+        is_transit = any(
+            (e.startswith("class=") and e.split("=", 1)[1].strip() in _TRANSIT_CLASSES)
+            or e.startswith("subtype=transit")
+            for e in (where_exprs or [])
+        )
+        if is_transit:
+            loc_flag = (
+                f'--in "{in_place}"' if in_place
+                else (f"--bbox {bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}" if bbox else "--in <place>")
+            )
+            raise click.UsageError(
+                f"Transit stops are `place` features, not infrastructure — run: "
+                f"overturemaps places --category bus_stop {loc_flag}"
+            )
+        click.secho(
+            "[overturemaps] Tip: transit stops (bus_stop, bus_station, "
+            "train_station) are `place` features — use "
+            "`overturemaps places --category bus_stop`. "
+            "For non-transit infrastructure, download is correct.",
             fg="bright_black", err=True,
         )
 
@@ -623,12 +712,17 @@ def where(ctx, query, show_all, geometry):
     json_mode = ctx.obj.get("json", False)
     matches = resolve(query)
     if not matches:
-        msg = _no_match_help(query)
-        if json_mode:
-            _emit_error_json(msg, code="no_match")
-        else:
-            click.secho(msg, fg="red", err=True)
-        ctx.exit(1)
+        try:
+            pick = _resolve_in_place(query)
+            matches = [pick]
+        except click.UsageError as e:
+            msg = str(e)
+            if json_mode:
+                _emit_error_json(msg, code="no_match")
+            else:
+                click.secho(msg, fg="red", err=True)
+            ctx.exit(1)
+            return
     pick = matches[0]
 
     if geometry:
@@ -664,6 +758,19 @@ def where(ctx, query, show_all, geometry):
                 f"rerun with --all to see them.)",
                 fg="yellow",
             )
+
+
+@cli.command()
+@click.argument("query", type=str)
+@click.pass_context
+def boundary(ctx, query):
+    """Emit a division's polygon as a GeoJSON Feature (for clipping/spatial joins).
+
+    QUERY is a place name, e.g. 'Alameda County, CA' or 'Brooklyn, NY'.
+    Outputs the division_area polygon on stdout — pipe to files or spatial tools.
+    """
+    division = _resolve_in_place(query)
+    _emit_division_geometry(ctx, division)
 
 
 @cli.command()
@@ -850,8 +957,9 @@ def schema(ctx, type_, release):
 
 @cli.command()
 @click.option("-t", "--type", "type_",
-              type=click.Choice(["place"]), default="place", show_default=True,
-              help="Currently only `place` is supported.")
+              type=str, default="place", show_default=True,
+              help="Feature type to enumerate. Only `place` is supported; "
+                   "other types use `class` — see `overturemaps schema -t TYPE`.")
 @click.option("--bbox", required=False, type=BboxParamType())
 @click.option("--in", "in_place", required=False, type=str)
 @click.option("--top", default=20, show_default=True, type=int)
@@ -860,6 +968,19 @@ def schema(ctx, type_, release):
 @click.pass_context
 def categories(ctx, type_, bbox, in_place, top, release):
     """Enumerate `categories.primary` values, sorted by count desc."""
+    if type_ != "place":
+        verb = TYPE_TO_VERB.get(type_)
+        if verb:
+            raise click.UsageError(
+                f"`categories` enumerates `categories.primary` for place features. "
+                f"For `{type_}`, the classifying field is `class` — run "
+                f"`overturemaps --json schema -t {type_}` to see available values, "
+                f"or filter directly with `overturemaps {verb} --class <value>`."
+            )
+        raise click.UsageError(
+            f"`categories` only enumerates `categories.primary` for place features. "
+            f"Run `overturemaps --json schema -t {type_}` to inspect available fields."
+        )
     if bbox is not None and in_place is not None:
         raise click.UsageError("--bbox and --in are mutually exclusive")
     if in_place is not None:
@@ -974,7 +1095,8 @@ def cache_build_cmd():
 @click.option("-o", "--output", required=False, type=click.Path())
 @click.option("-r", "--release", default=None, callback=validate_release,
               required=False)
-def places(in_place, bbox, category, where_exprs, output_format, output, release):
+@click.option("--json", "json_no_op", is_flag=True, default=False, hidden=True)
+def places(in_place, bbox, category, where_exprs, output_format, output, release, json_no_op):
     """Download POIs in a named place. Filter by --category for common asks."""
     if bbox is not None and in_place is not None:
         raise click.UsageError("--bbox and --in are mutually exclusive")
@@ -1054,7 +1176,8 @@ def places(in_place, bbox, category, where_exprs, output_format, output, release
 @click.option("-o", "--output", required=False, type=click.Path())
 @click.option("-r", "--release", default=None, callback=validate_release,
               required=False)
-def buildings(in_place, bbox, where_exprs, output_format, output, release):
+@click.option("--json", "json_no_op", is_flag=True, default=False, hidden=True)
+def buildings(in_place, bbox, where_exprs, output_format, output, release, json_no_op):
     """Download buildings in a named place."""
     if bbox is not None and in_place is not None:
         raise click.UsageError("--bbox and --in are mutually exclusive")
@@ -1098,7 +1221,8 @@ def buildings(in_place, bbox, where_exprs, output_format, output, release):
 @click.option("-o", "--output", required=False, type=click.Path())
 @click.option("-r", "--release", default=None, callback=validate_release,
               required=False)
-def roads(in_place, bbox, road_class, where_exprs, output_format, output, release):
+@click.option("--json", "json_no_op", is_flag=True, default=False, hidden=True)
+def roads(in_place, bbox, road_class, where_exprs, output_format, output, release, json_no_op):
     """Download road segments in a named place."""
     if bbox is not None and in_place is not None:
         raise click.UsageError("--bbox and --in are mutually exclusive")
@@ -1145,7 +1269,8 @@ def roads(in_place, bbox, road_class, where_exprs, output_format, output, releas
 @click.option("-o", "--output", required=False, type=click.Path())
 @click.option("-r", "--release", default=None, callback=validate_release,
               required=False)
-def water(in_place, bbox, water_class, where_exprs, output_format, output, release):
+@click.option("--json", "json_no_op", is_flag=True, default=False, hidden=True)
+def water(in_place, bbox, water_class, where_exprs, output_format, output, release, json_no_op):
     """Download water features (oceans, lakes, rivers, ...) in a named place."""
     if bbox is not None and in_place is not None:
         raise click.UsageError("--bbox and --in are mutually exclusive")
@@ -1193,7 +1318,8 @@ def water(in_place, bbox, water_class, where_exprs, output_format, output, relea
 @click.option("-o", "--output", required=False, type=click.Path())
 @click.option("-r", "--release", default=None, callback=validate_release,
               required=False)
-def landuse(in_place, bbox, landuse_class, where_exprs, output_format, output, release):
+@click.option("--json", "json_no_op", is_flag=True, default=False, hidden=True)
+def landuse(in_place, bbox, landuse_class, where_exprs, output_format, output, release, json_no_op):
     """Download land-use polygons (residential, commercial, ...) in a named place."""
     if bbox is not None and in_place is not None:
         raise click.UsageError("--bbox and --in are mutually exclusive")
@@ -1244,8 +1370,9 @@ def landuse(in_place, bbox, landuse_class, where_exprs, output_format, output, r
 @click.option("-o", "--output", required=False, type=click.Path())
 @click.option("-r", "--release", default=None, callback=validate_release,
               required=False)
+@click.option("--json", "json_no_op", is_flag=True, default=False, hidden=True)
 def addresses(in_place, bbox, street, number, postcode, where_exprs,
-              output_format, output, release):
+              output_format, output, release, json_no_op):
     """Find addresses in a named place or bbox.
 
     --street uses case-insensitive substring match ("Fountain" matches "Fountain
@@ -1296,7 +1423,7 @@ def addresses(in_place, bbox, street, number, postcode, where_exprs,
               type=click.Choice(get_all_overture_types()), default="place",
               show_default=True)
 @click.option("-n", default=10, show_default=True, type=int)
-@click.option("--radius", type=int, required=False,
+@click.option("-r", "--radius", type=int, required=False,
               help="Radius in meters; defaults per type.")
 @click.option("--where", "where_exprs", multiple=True,
               help="Attribute filter K OP V (repeatable). "
@@ -1305,9 +1432,10 @@ def addresses(in_place, bbox, street, number, postcode, where_exprs,
               type=click.Choice(["geojson", "geojsonseq", "geoparquet"]),
               default="geojsonseq", show_default=True)
 @click.option("-o", "--output", required=False, type=click.Path())
-@click.option("-r", "--release", default=None, callback=validate_release,
+@click.option("--release", default=None, callback=validate_release,
               required=False)
-def at(latlon, type_, n, radius, where_exprs, output_format, output, release):
+@click.option("--json", "json_no_op", is_flag=True, default=False, hidden=True)
+def at(latlon, type_, n, radius, where_exprs, output_format, output, release, json_no_op):
     """Nearest-neighbor lookup. LATLON is 'LAT,LON' (lat first, geographic)."""
     lat, lon = _parse_latlon(latlon)
 
