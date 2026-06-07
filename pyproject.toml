@@ -1,6 +1,6 @@
 [project]
 name = "botmap"
-version = "0.1.1"
+version = "0.1.2"
 description = "Agent-first Python CLI for querying Overture Maps (overturemaps.org) data, built so LLM agents (and humans) can answer geospatial questions without GIS expertise. Forked from overturemaps-py."
 authors = [
     {name = "Jacob Wasserman", email = "jwasserman@meta.com"},
