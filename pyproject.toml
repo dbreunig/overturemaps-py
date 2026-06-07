@@ -1,13 +1,10 @@
 [project]
 name = "botmap"
-version = "1.1.0"
-description = "Python tools for interacting with Overture Maps (overturemaps.org) data."
+version = "0.1.1"
+description = "Agent-first Python CLI for querying Overture Maps (overturemaps.org) data, built so LLM agents (and humans) can answer geospatial questions without GIS expertise. Forked from overturemaps-py."
 authors = [
-    {name = "Jacob Wasserman", email = "jwasserman@meta.com"}
-]
-maintainers = [
-    {name = "Adam Lastowka", email = "adam@overturemaps.org"},
-    {name = "Dana Bauer", email = "dana@overturemaps.org"},
+    {name = "Jacob Wasserman", email = "jwasserman@meta.com"},
+    {name = "Drew Breunig", email = "dbreunig@gmail.com"},
 ]
 license = "MIT"
 readme = "README.md"

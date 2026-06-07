@@ -1,20 +1,73 @@
 [![PyPi](https://img.shields.io/pypi/v/botmap.svg)](https://pypi.python.org/pypi/botmap)
 
-# overturemaps-py
+# botmap
 
-Official Python command-line tool of the [Overture Maps Foundation](https://overturemaps.org)
+**A fork of [overturemaps-py](https://github.com/OvertureMaps/overturemaps-py), rebuilt as a demonstration of agent-first CLI design.**
 
-Overture Maps provides free and open geospatial map data, from many different sources and normalized to a
-[common schema](https://github.com/OvertureMaps/schema). This tool helps to download Overture data
-within a region of interest and converts it to a few different file formats. For more information about accessing
-Overture Maps data, see our official documentation site <https://docs.overturemaps.org>.
+`botmap` exists to demonstrate two things:
 
-Note: This repository and project are experimental. Things are likely change including the user interface
-until a stable release, but we will keep the documentation here up-to-date.
+1. **How to design a CLI for agent use.** What changes when the primary user of a
+   command-line tool is an LLM agent rather than a person who has read the docs —
+   and how those same changes make the tool friendlier for humans too.
+2. **How LLMs can deliver GIS data to non-experts.** Open geospatial data is
+   abundant but gated behind domain expertise: feature types, schemas, bounding
+   boxes, category taxonomies. Pair a well-designed CLI with an agent's natural
+   language abilities and *"how many coffee shops are in Brooklyn?"* becomes a
+   question anyone can ask, no GIS background required.
+
+The data is [Overture Maps](https://overturemaps.org): free and open geospatial
+map data from many sources, normalized to a
+[common schema](https://github.com/OvertureMaps/schema) (see
+<https://docs.overturemaps.org>). The upstream `overturemaps` CLI remains the
+official Overture tool; `botmap` is the design experiment built on top of it.
+
+## The redesign in a nutshell
+
+The upstream CLI is *data-shaped*: a single `download` command whose flags mirror
+the storage layout.
+
+```bash
+overturemaps download --bbox=-71.068,42.353,-71.058,42.363 -t place -f geojson -o pois.geojson
+```
+
+Using it means already knowing which type holds your answer, having a WGS84
+bounding box on hand, and reading the schema docs in another tab. Agents, and
+the geospatial naive, can't easily ask data-shaped questions. They ask *question-shaped*
+ones: "find hospitals in Manhattan", "what's at this lat/lon?", "coffee shops
+within 1km of here". So our redesign rule is:
+
+> **Expose verbs that read like the question, and resolve the data-shaped parts internally.**
+
+| Design move | What it looks like |
+|---|---|
+| Verbs over types | `botmap places --category hospital`, not `download -t place --where …` |
+| Lookups, not coordinates | `--in "Brooklyn"` resolves names to geometry; no hand-built bboxes |
+| Discovery is a command, not a manual | `themes`, `types`, `schema -t place`, `categories`, `capabilities` |
+| Preview before paying | `count` and `sample` size up a query before any download |
+| `--json` everywhere | every metadata command is a clean pipe source; stdout for data, stderr for humans |
+| Errors teach | zero rows for `--category ferry_terminal` suggests `ferry_boat_company` |
+| Ship the context | `install-skill` registers a Skill so agents discover the CLI on their own |
+| Measured, don't assume | an [eval suite](#agent-usability-evals) scores whether agents can actually use it |
+
+`download` still exists, but it's the escape hatch now, not the front door.
 
 ## Quick Start
 
-Download the building footprints for the specific bounding box as GeoJSON and save to a file named "boston.geojson"
+Question-shaped, end to end:
+
+```bash
+# "Where is Brooklyn, and how many coffee shops does it have?"
+botmap where "Brooklyn"
+botmap count -t place --in "Brooklyn" --where categories.primary=coffee_shop
+
+# "Get them as GeoJSON"
+botmap places --in "Brooklyn" --category coffee_shop -f geojsonseq -o brooklyn_coffee.jsonl
+```
+
+Now this is still more confusing than it should be, especially for human users. Bot users,
+however, can refer to the installed skill, errors, and schema built into the CLI.
+
+The data-shaped form still works when you have exact coordinates:
 
 ```bash
 botmap download --bbox=-71.068,42.353,-71.058,42.363 -f geojson --type=building -o boston.geojson
@@ -25,6 +78,7 @@ botmap download --bbox=-71.068,42.353,-71.058,42.363 -f geojson --type=building 
 Install the Skill so an agent can discover this CLI automatically:
 
 ```bash
+pip install botmap
 botmap install-skill
 ```
 
@@ -221,35 +275,9 @@ botmap places --in "Brooklyn" --category coffee_shop \
   -f geojsonseq -o brooklyn_coffee.jsonl
 ```
 
+----
+
 ## Usage
-
-#### `download`
-
-Download Overture Maps data with an optional bounding box into the specified file format.
-When specifying a bounding box, only the minimum data is transferred. The result is streamed out and
-can handle arbitrarily large bounding boxes.
-
-Command-line options:
-
-- `--bbox` (optional): west, south, east, north longitude and latitude coordinates. When omitted the
-  entire dataset for the specified type will be downloaded
-- `-f` (required: one of "geojson", "geojsonseq", "geoparquet"): output format
-- `--output`/`-o` (optional): Location of output file. When omitted output will be written to stdout.
-- `--type`/`-t` (required): The Overture map data type to be downloaded. Examples of types are `building`
-  for building footprints, `place` for POI places data, etc. Run `botmap download --help` for the
-  complete list of allowed types
-- `--connect_timeout` (optional): Socket connection timeout, in seconds. If omitted, the AWS SDK default value is used (typically 1 second).
-- `--request_timeout` (optional): Socket read timeouts on Windows and macOS, in seconds. If omitted, the AWS SDK default value is used (typically 3 seconds). This option is ignored on non-Windows, non-macOS systems.
-- `--stac/--no-stac` (optional): By default, the reader uses Overture's [STAC catalog](https://stac.overturemaps.org/) to speed up queries to the latest release. If the `--no-stac` flag is present, the CLI will use the S3 path for the latest release directly.
-
-This downloads data directly from Overture's S3 bucket without interacting with any other servers.
-By including bounding box extents on each row in the Overture distribution, the underlying Parquet
-readers use the Parquet summary statistics to download the minimum amount of data
-necessary to extract data from the desired region.
-
-To help find bounding boxes of interest, we like this [bounding box tool](https://boundingbox.klokantech.com/)
-from [Klokantech](https://www.klokantech.com/). Choose the CSV format and copy the value directly into
-the `--bbox` field here.
 
 #### `where TEXT`
 
@@ -499,109 +527,22 @@ n = count_rows("place", bbox=division.bbox, stac=True)
 print(f"Brooklyn has {n:,} places")
 ```
 
-#### Arrow / pyarrow
-
-`record_batch_reader` returns a `pyarrow.RecordBatchReader` — a streaming cursor over the data.
-This is the lowest-level entry point and works with any Arrow-compatible tool.
-
-```python
-from botmap import record_batch_reader
-
-bbox = (-71.068, 42.353, -71.058, 42.363)  # xmin, ymin, xmax, ymax
-reader = record_batch_reader("building", bbox=bbox)
-
-if reader is not None:
-    table = reader.read_all()
-    print(table.schema)
-```
-
-`record_batch_reader` also accepts attribute filters that push down to PyArrow.
-Build them by parsing CLI-style expressions or constructing `ParsedFilter`
-instances directly:
-
-```python
-from botmap import record_batch_reader, best_match
-from botmap.filters import parse_where_expr
-
-bbox = best_match("Manhattan").bbox
-filters = [parse_where_expr("height>100"), parse_where_expr("num_floors>=10")]
-reader = record_batch_reader("building", bbox=bbox, where_filters=filters, stac=True)
-table = reader.read_all()
-```
-
-#### GeoDataFrame (geopandas)
-
-`geodataframe` loads data directly into a `geopandas.GeoDataFrame`. Requires `geopandas` to be
-installed (`pip install botmap[geopandas]` or `pip install geopandas`).
-
-```python
-from botmap import geodataframe, best_match
-
-bbox = best_match("Boston, MA").bbox
-gdf = geodataframe("building", bbox=bbox)
-print(gdf.head())
-```
-
-#### Writing to a file format
-
-Use `get_writer` and `copy` from `botmap.writers` to write data to GeoJSON, GeoJSONSeq, or
-GeoParquet without the CLI:
-
-```python
-from botmap import record_batch_reader
-from botmap.writers import copy, get_writer
-
-bbox = (-71.068, 42.353, -71.058, 42.363)
-reader = record_batch_reader("building", bbox=bbox)
-
-with get_writer("geojson", "boston.geojson", schema=reader.schema) as writer:
-    copy(reader, writer)
-```
-
-Supported format strings: `"geojson"`, `"geojsonseq"`, `"geoparquet"`.
-
 ## Installation
 
-botmap is available via [Homebrew](https://brew.sh/):
-
-```bash
-brew install botmap
-```
-
-To install botmap from [PyPi](https://pypi.org/project/botmap/) using pip:
+Install botmap from [PyPI](https://pypi.org/project/botmap/) using pip:
 
 ```bash
 pip install botmap
 ```
 
-botmap is also on [conda-forge](https://anaconda.org/conda-forge/botmap) and can be installed using conda, mamba, or pixi. To install botmap using conda:
-
-```bash
-conda install -c conda-forge botmap
-```
-
 If you have [uv](https://docs.astral.sh/uv/) installed, you can run botmap [with uvx](https://docs.astral.sh/uv/guides/tools/#running-tools) without installing it:
 
 ```bash
-uvx botmap download --bbox=-71.068,42.353,-71.058,42.363 -f geojson --type=building -o boston.parquet
+uvx botmap count -t building --in "Boston, MA"
 ```
 
-## Performance
-
-Benchmarks using synthetic data on Apple M-series hardware:
-
-| Output format | Geometry | Rows | Time |
-|---|---|---|---|
-| GeoJSON | Points | 10 000 | 31 ms |
-| GeoJSON | Polygons | 10 000 | 44 ms |
-| GeoParquet | — | — | network/disk bound |
-
-To run the benchmarks locally:
-
-```bash
-uv sync --group dev
-pytest benchmarks/ -v
-```
+(The upstream `overturemaps` package is additionally available via Homebrew and
+conda-forge; botmap is currently PyPI-only.)
 
 ## Agent-Usability Evals
 
