@@ -70,10 +70,12 @@ to `download`:
 
 ## Limiting and proximity
 
-- **`-n` / `--limit` works on every data verb** — `sample`, `at`, and all the
-  convenience verbs (`places`, `buildings`, `roads`, `water`, `landuse`,
+- **`-n` / `--limit` caps the output of `sample`, `at`, and every
+  convenience verb** (`places`, `buildings`, `roads`, `water`, `landuse`,
   `addresses`). `botmap places --in "…" -n 20` emits at most 20 features.
-  Without `-n`, verbs stream **all** matches (pipe or `-o` them).
+  Without `-n`, these stream **all** matches (pipe or `-o` them). (The
+  low-level `download` command has no `-n`; use a convenience verb or
+  `sample` when you want to limit.)
 - **"Near a point" → use `at`, not a verb.** `botmap at LAT,LON -t place -n 10`
   returns the N features actually *closest* to the point, sorted by distance.
   The `--in` / `--bbox` verbs filter by bounding box, so "near" there means
