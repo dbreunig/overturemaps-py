@@ -125,9 +125,13 @@ botmap roads --in "Alameda County, CA" --class cycleway \
   -f geojsonseq -o bikepaths.jsonl
 ```
 
-### 7. What's near a point
+### 7. What's near a point (distance-sorted)
 ```bash
+# `at` returns the N features CLOSEST to the point, ordered by distance —
+# this is the tool for "near X" questions. --radius (meters) bounds the
+# search; --category / --where filter it.
 botmap at 40.7484,-73.9857 -t place -n 10
+botmap at 40.7484,-73.9857 -t place --category pharmacy --radius 250 -n 10
 ```
 
 ### 8. Which admin areas contain a point
@@ -186,6 +190,15 @@ botmap places --in "Williamsburg, NY" --category bus_stop \
 # Emits a GeoJSON Feature with the division_area polygon — the supported way
 # to get a boundary. Don't use `download -t division_area` for this.
 botmap where "Alameda County, CA" --geometry > county.geojson
+```
+
+### 17. Address lookups
+```bash
+# --street is a case-insensitive SUBSTRING match ("Fountain" matches "Fountain
+# St", "E Fountain Blvd"); --number and --postcode are exact. Requires --in or
+# --bbox. For other address fields, use --where.
+botmap addresses --in "Boston, MA" --street "Beacon" -n 20
+botmap addresses --bbox -71.07,42.35,-71.06,42.36 --postcode 02108
 ```
 
 ## Schema cheatsheet
