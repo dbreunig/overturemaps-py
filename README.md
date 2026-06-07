@@ -21,7 +21,29 @@ map data from many sources, normalized to a
 <https://docs.overturemaps.org>). The upstream `overturemaps` CLI remains the
 official Overture tool; `botmap` is the design experiment built on top of it.
 
-## The redesign in a nutshell
+## Quick Start
+
+Install it, install the Skill, then just ask.
+
+```bash
+pip install botmap
+botmap install-skill        # registers a Skill so coding agents discover the CLI
+```
+
+Now launch your agent (Claude Code, etc.) and ask anything a map could answer:
+
+> *How many coffee shops are in Brooklyn, NY?*
+>
+> *Find every hospital in Manhattan and display it as an HTML map.*
+>
+> *What restaurants are within 500m of UC Berkeley?*
+
+The agent picks up the installed Skill, translates the question into botmap's
+verbs, and hands back the data — no GIS knowledge required, on your part or its.
+The rest of this README is about *why* that works, and how to drive the CLI
+yourself.
+
+## Redesigning a Data CLI
 
 The upstream CLI is *data-shaped*: a single `download` command whose flags mirror
 the storage layout.
@@ -51,9 +73,10 @@ within 1km of here". So our redesign rule is:
 
 `download` still exists, but it's the escape hatch now, not the front door.
 
-## Quick Start
+## Driving the CLI Yourself
 
-Question-shaped, end to end:
+You don't need an agent — the same verbs read naturally by hand. Question-shaped,
+end to end:
 
 ```bash
 # "Where is Brooklyn, and how many coffee shops does it have?"
@@ -64,25 +87,7 @@ botmap count -t place --in "Brooklyn" --where categories.primary=coffee_shop
 botmap places --in "Brooklyn" --category coffee_shop -f geojsonseq -o brooklyn_coffee.jsonl
 ```
 
-Now this is still more confusing than it should be, especially for human users. Bot users,
-however, can refer to the installed skill, errors, and schema built into the CLI.
-
-The data-shaped form still works when you have exact coordinates:
-
-```bash
-botmap download --bbox=-71.068,42.353,-71.058,42.363 -f geojson --type=building -o boston.geojson
-```
-
-## Quick Start for Coding Agents
-
-Install the Skill so an agent can discover this CLI automatically:
-
-```bash
-pip install botmap
-botmap install-skill
-```
-
-Self-introspect:
+Let the CLI introspect itself — this is exactly what the Skill teaches an agent to do:
 
 ```bash
 botmap --json capabilities    # list every subcommand + parameters
@@ -91,12 +96,10 @@ botmap --json types           # list types
 botmap --json schema -t place # fields + a sample feature
 ```
 
-Resolve a place, count, then download:
+The data-shaped form still works when you have exact coordinates:
 
 ```bash
-botmap --json where "Boston, MA"
-botmap --json count -t place --in "Boston, MA" --where categories.primary=restaurant
-botmap places --in "Boston, MA" --category restaurant -f geojsonseq -o out.jsonl
+botmap download --bbox=-71.068,42.353,-71.058,42.363 -f geojson --type=building -o boston.geojson
 ```
 
 ## Examples
