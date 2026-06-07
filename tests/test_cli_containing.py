@@ -9,7 +9,7 @@ import pyarrow.compute as pc
 import pytest
 from click.testing import CliRunner
 
-from overturemaps.cli import cli
+from botmap.cli import cli
 
 
 def _write_index(tmp_path):
@@ -30,22 +30,22 @@ def _write_index(tmp_path):
         "bbox_xmax": [-66.0, -69.9, -70.99],
         "bbox_ymax": [71.0, 42.9, 42.40],
     })
-    p = tmp_path / "overturemaps" / "divisions-index-2025-12-17.0.parquet"
+    p = tmp_path / "botmap" / "divisions-index-2025-12-17.0.parquet"
     p.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(table, p)
 
 
 def test_containing_returns_innermost_first(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
     # We stub _polygon_contains and _prefetch_polygons so the test doesn't hit S3.
     monkeypatch.setattr(
-        "overturemaps.cli._polygon_contains",
+        "botmap.cli._polygon_contains",
         lambda division_id, lon, lat, candidate_bbox=None, geometry_wkb=None: True,
     )
     monkeypatch.setattr(
-        "overturemaps.cli._prefetch_polygons",
+        "botmap.cli._prefetch_polygons",
         lambda division_ids, lon, lat, release: None,
     )
 

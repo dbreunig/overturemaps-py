@@ -1,8 +1,8 @@
 """Tests for the releases module."""
 
 import pytest
-from overturemaps import releases
-from overturemaps.core import get_latest_release
+from botmap import releases
+from botmap.core import get_latest_release
 
 
 def test_list_releases():

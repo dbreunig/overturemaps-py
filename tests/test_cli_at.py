@@ -4,7 +4,7 @@ import pyarrow as pa
 import pytest
 from click.testing import CliRunner
 
-from overturemaps.cli import cli
+from botmap.cli import cli
 
 
 def _features_reader(rows):
@@ -44,9 +44,9 @@ def test_at_sorts_by_distance(monkeypatch, tmp_path):
     rows = [{"id": pid, "name": name, "geometry": wkb}
             for pid, name, wkb in pts]
 
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader",
+    monkeypatch.setattr("botmap.cli.record_batch_reader",
                         lambda *a, **k: _features_reader(rows))
 
     runner = CliRunner()
@@ -73,9 +73,9 @@ def test_at_passes_where_filters(monkeypatch, tmp_path):
         captured["where_filters"] = where_filters
         return _features_reader([])
 
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader", fake_reader)
+    monkeypatch.setattr("botmap.cli.record_batch_reader", fake_reader)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -96,9 +96,9 @@ def test_at_passes_where_filters(monkeypatch, tmp_path):
 
 def test_at_invalid_where_errors(monkeypatch):
     """`at --where` with an invalid expression should fail cleanly."""
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader",
+    monkeypatch.setattr("botmap.cli.record_batch_reader",
                         lambda *a, **k: _features_reader([]))
 
     runner = CliRunner()

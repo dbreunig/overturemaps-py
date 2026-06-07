@@ -5,7 +5,7 @@ import json
 import pyarrow as pa
 from click.testing import CliRunner
 
-from overturemaps.cli import cli
+from botmap.cli import cli
 
 
 def test_schema_command_json(monkeypatch):
@@ -31,9 +31,9 @@ def test_schema_command_json(monkeypatch):
                 schema=schema,
             )
 
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader",
+    monkeypatch.setattr("botmap.cli.record_batch_reader",
                         lambda *a, **k: _Reader())
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
 
     runner = CliRunner()
@@ -72,9 +72,9 @@ def test_schema_command_serializes_wkb_geometry(monkeypatch):
                 [{"id": "abc", "geometry": wkb}], schema=schema,
             )
 
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader",
+    monkeypatch.setattr("botmap.cli.record_batch_reader",
                         lambda *a, **k: _Reader())
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
 
     runner = CliRunner()

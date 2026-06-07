@@ -1,4 +1,4 @@
-[![PyPi](https://img.shields.io/pypi/v/overturemaps.svg)](https://pypi.python.org/pypi/overturemaps)
+[![PyPi](https://img.shields.io/pypi/v/botmap.svg)](https://pypi.python.org/pypi/botmap)
 
 # overturemaps-py
 
@@ -17,7 +17,7 @@ until a stable release, but we will keep the documentation here up-to-date.
 Download the building footprints for the specific bounding box as GeoJSON and save to a file named "boston.geojson"
 
 ```bash
-overturemaps download --bbox=-71.068,42.353,-71.058,42.363 -f geojson --type=building -o boston.geojson
+botmap download --bbox=-71.068,42.353,-71.058,42.363 -f geojson --type=building -o boston.geojson
 ```
 
 ## Quick Start for Coding Agents
@@ -25,24 +25,24 @@ overturemaps download --bbox=-71.068,42.353,-71.058,42.363 -f geojson --type=bui
 Install the Skill so an agent can discover this CLI automatically:
 
 ```bash
-overturemaps install-skill
+botmap install-skill
 ```
 
 Self-introspect:
 
 ```bash
-overturemaps --json capabilities    # list every subcommand + parameters
-overturemaps --json themes          # list themes
-overturemaps --json types           # list types
-overturemaps --json schema -t place # fields + a sample feature
+botmap --json capabilities    # list every subcommand + parameters
+botmap --json themes          # list themes
+botmap --json types           # list types
+botmap --json schema -t place # fields + a sample feature
 ```
 
 Resolve a place, count, then download:
 
 ```bash
-overturemaps --json where "Boston, MA"
-overturemaps --json count -t place --in "Boston, MA" --where categories.primary=restaurant
-overturemaps places --in "Boston, MA" --category restaurant -f geojsonseq -o out.jsonl
+botmap --json where "Boston, MA"
+botmap --json count -t place --in "Boston, MA" --where categories.primary=restaurant
+botmap places --in "Boston, MA" --category restaurant -f geojsonseq -o out.jsonl
 ```
 
 ## Examples
@@ -51,61 +51,61 @@ overturemaps places --in "Boston, MA" --category restaurant -f geojsonseq -o out
 
 ```bash
 # All hospitals in Brooklyn
-overturemaps places --in "Brooklyn" --category hospital -f geojsonseq -o hospitals.jsonl
+botmap places --in "Brooklyn" --category hospital -f geojsonseq -o hospitals.jsonl
 
 # Coffee shops in Brooklyn, with high source confidence
-overturemaps places --in "Brooklyn" --category coffee_shop --where 'confidence>0.8' \
+botmap places --in "Brooklyn" --category coffee_shop --where 'confidence>0.8' \
   -f geojsonseq -o brooklyn_coffee.jsonl
 
 # Hotels in Berlin (using a country code qualifier)
-overturemaps places --in "Berlin, DE" --category hotel -f geojsonseq -o berlin_hotels.jsonl
+botmap places --in "Berlin, DE" --category hotel -f geojsonseq -o berlin_hotels.jsonl
 
 # Pharmacies near the Empire State Building (~250m)
-overturemaps at 40.7484,-73.9857 -t place --category pharmacy --radius 250 -n 20
+botmap at 40.7484,-73.9857 -t place --category pharmacy --radius 250 -n 20
 ```
 
 ### Discovering before downloading
 
 ```bash
 # What categories exist in Brooklyn? (cheap; reads only places in the bbox)
-overturemaps categories -t place --in "Brooklyn" --top 30
+botmap categories -t place --in "Brooklyn" --top 30
 
 # How many buildings in Manhattan are at least 100m tall? Decide before downloading.
-overturemaps count -t building --in "Manhattan" --where 'height>=100'
+botmap count -t building --in "Manhattan" --where 'height>=100'
 
 # Peek at five matching features before committing to the full pull
-overturemaps sample -t building --in "Manhattan" --where 'height>=100' -n 5
+botmap sample -t building --in "Manhattan" --where 'height>=100' -n 5
 ```
 
 ### Buildings with attributes
 
 ```bash
 # Tall buildings in Manhattan, as GeoParquet for analytics
-overturemaps buildings --in "Manhattan" --where 'height>150' -f geoparquet -o tall.parquet
+botmap buildings --in "Manhattan" --where 'height>150' -f geoparquet -o tall.parquet
 
 # Skyscrapers (≥40 floors) in Chicago
-overturemaps buildings --in "Chicago, IL" --where 'num_floors>=40' -f geojsonseq -o skyscrapers.jsonl
+botmap buildings --in "Chicago, IL" --where 'num_floors>=40' -f geojsonseq -o skyscrapers.jsonl
 
 # Buildings of a specific subtype
-overturemaps buildings --in "Boston, MA" --where subtype=education -f geojsonseq -o schools.jsonl
+botmap buildings --in "Boston, MA" --where subtype=education -f geojsonseq -o schools.jsonl
 ```
 
 ### Roads and transportation
 
 ```bash
 # Highways in Texas
-overturemaps roads --in "Texas, USA" --class motorway -f geojsonseq -o tx_highways.jsonl
+botmap roads --in "Texas, USA" --class motorway -f geojsonseq -o tx_highways.jsonl
 
 # Main roads (primary or secondary) in Berlin
-overturemaps roads --in "Berlin, DE" --where "class in [primary,secondary]" \
+botmap roads --in "Berlin, DE" --where "class in [primary,secondary]" \
   -f geojsonseq -o berlin_main.jsonl
 
 # Footways and cycleways in central Amsterdam
-overturemaps roads --in "Amsterdam, NL" --where "class in [footway,cycleway]" \
+botmap roads --in "Amsterdam, NL" --where "class in [footway,cycleway]" \
   -f geojsonseq -o amsterdam_paths.jsonl
 
 # `roads` covers every transportation segment — use --class for bike paths too
-overturemaps roads --in "Alameda County, CA" --class cycleway \
+botmap roads --in "Alameda County, CA" --class cycleway \
   -f geojsonseq -o bikepaths.jsonl
 ```
 
@@ -113,10 +113,10 @@ overturemaps roads --in "Alameda County, CA" --class cycleway \
 
 ```bash
 # Lakes near Minneapolis
-overturemaps water --in "Minneapolis, MN" --class lake -f geojsonseq -o lakes.jsonl
+botmap water --in "Minneapolis, MN" --class lake -f geojsonseq -o lakes.jsonl
 
 # Residential land-use polygons in Brooklyn
-overturemaps landuse --in "Brooklyn, NY" --class residential \
+botmap landuse --in "Brooklyn, NY" --class residential \
   -f geojsonseq -o residential.jsonl
 ```
 
@@ -128,10 +128,10 @@ Both `water` and `landuse` mirror `roads`: pass `--class` (e.g. `ocean`,
 
 ```bash
 # Get a division's polygon as a GeoJSON Feature (for clipping / spatial joins)
-overturemaps boundary "Alameda County, CA" > county.geojson
+botmap boundary "Alameda County, CA" > county.geojson
 
 # Longer form: where --geometry does the same thing
-overturemaps where "Alameda County, CA" --geometry > county.geojson
+botmap where "Alameda County, CA" --geometry > county.geojson
 ```
 
 `boundary` is the dedicated verb for fetching a division's polygon. It accepts
@@ -144,18 +144,18 @@ long-form. Using `download -t division_area` will now error with a redirect.
 ```bash
 # Find a specific address (case-insensitive substring on street;
 # --number / --postcode are exact). --in or --bbox is required.
-overturemaps addresses --in "Alameda, US-CA" \
+botmap addresses --in "Alameda, US-CA" \
   --street Fountain --number 1208
 
 # All "Main St" addresses in a city
-overturemaps addresses --in "Brookline, MA" --street "Main St"
+botmap addresses --in "Brookline, MA" --street "Main St"
 
 # All addresses inside a small bbox over Beacon Hill
-overturemaps addresses --bbox=-71.075,42.355,-71.060,42.365 \
+botmap addresses --bbox=-71.075,42.355,-71.060,42.365 \
   -f geojsonseq -o beacon_hill_addresses.jsonl
 
 # Address density in a neighborhood
-overturemaps count -t address --in "Brookline, MA"
+botmap count -t address --in "Brookline, MA"
 ```
 
 The `addresses` command requires `--in` or `--bbox` so queries stay
@@ -169,10 +169,10 @@ rows, the data simply isn't there for that area yet.
 
 ```bash
 # What's at a given lat/lon (defaults to nearest POIs)
-overturemaps at 51.5074,-0.1278 -n 5
+botmap at 51.5074,-0.1278 -n 5
 
 # Which admin divisions contain this point? (innermost-first)
-overturemaps containing 35.6762,139.6503
+botmap containing 35.6762,139.6503
 ```
 
 ### Composing commands
@@ -182,19 +182,19 @@ when scripting against the CLI.
 
 ```bash
 # Resolve a bbox, then download with it
-BBOX=$(overturemaps --json where "Berlin, DE" | jq -r '.bbox | join(",")')
-overturemaps download -t place --bbox "$BBOX" \
+BBOX=$(botmap --json where "Berlin, DE" | jq -r '.bbox | join(",")')
+botmap download -t place --bbox "$BBOX" \
   --where categories.primary=hotel \
   -f geojsonseq -o berlin_hotels.jsonl
 
 # Top-3 categories in a place, then dump features for each
-for cat in $(overturemaps --json categories -t place --in "Brooklyn" --top 3 | jq -r '.[].value'); do
-  overturemaps places --in "Brooklyn" --category "$cat" \
+for cat in $(botmap --json categories -t place --in "Brooklyn" --top 3 | jq -r '.[].value'); do
+  botmap places --in "Brooklyn" --category "$cat" \
     -f geojsonseq -o "brooklyn_${cat}.jsonl"
 done
 
 # Bbox of a country, then count of all roads
-COUNT=$(overturemaps --json count -t segment --in "Iceland" | jq '.count')
+COUNT=$(botmap --json count -t segment --in "Iceland" | jq '.count')
 echo "Iceland has $COUNT road segments"
 ```
 
@@ -205,19 +205,19 @@ A typical sequence an agent runs when given a layperson question like
 
 ```bash
 # 1. Confirm the place resolves
-overturemaps --json where "Brooklyn"
+botmap --json where "Brooklyn"
 # > {"name": "Brooklyn", "subtype": "locality", "region": "US-NY", "population": 2736074, ...}
 
 # 2. Discover the right category name
-overturemaps --json categories -t place --in "Brooklyn" --top 50 | jq -r '.[].value' | grep -i coffee
+botmap --json categories -t place --in "Brooklyn" --top 50 | jq -r '.[].value' | grep -i coffee
 # > coffee_shop
 
 # 3. Count
-overturemaps --json count -t place --in "Brooklyn" --where categories.primary=coffee_shop
+botmap --json count -t place --in "Brooklyn" --where categories.primary=coffee_shop
 # > {"count": 412, ...}
 
 # 4. Download if needed
-overturemaps places --in "Brooklyn" --category coffee_shop \
+botmap places --in "Brooklyn" --category coffee_shop \
   -f geojsonseq -o brooklyn_coffee.jsonl
 ```
 
@@ -236,7 +236,7 @@ Command-line options:
 - `-f` (required: one of "geojson", "geojsonseq", "geoparquet"): output format
 - `--output`/`-o` (optional): Location of output file. When omitted output will be written to stdout.
 - `--type`/`-t` (required): The Overture map data type to be downloaded. Examples of types are `building`
-  for building footprints, `place` for POI places data, etc. Run `overturemaps download --help` for the
+  for building footprints, `place` for POI places data, etc. Run `botmap download --help` for the
   complete list of allowed types
 - `--connect_timeout` (optional): Socket connection timeout, in seconds. If omitted, the AWS SDK default value is used (typically 1 second).
 - `--request_timeout` (optional): Socket read timeouts on Windows and macOS, in seconds. If omitted, the AWS SDK default value is used (typically 3 seconds). This option is ignored on non-Windows, non-macOS systems.
@@ -263,10 +263,10 @@ Boston, US-MA: `"Boston, MA"`, `"Boston, US-MA"`, `"Boston, US"`,
 `"Boston, USA"`, `"Boston, United States"`.
 
 ```bash
-overturemaps where "Boston, MA"
-overturemaps where "Alameda, CA" --all              # list every candidate
-overturemaps --json where "Walnut Creek, CA, USA" | jq '.bbox'
-overturemaps --json where "Cambridge" | jq '.candidates | length'   # how many Cambridges?
+botmap where "Boston, MA"
+botmap where "Alameda, CA" --all              # list every candidate
+botmap --json where "Walnut Creek, CA, USA" | jq '.bbox'
+botmap --json where "Cambridge" | jq '.candidates | length'   # how many Cambridges?
 ```
 
 Best match is picked by:
@@ -292,8 +292,8 @@ Emit a division's polygon as a GeoJSON Feature on stdout, for clipping or
 spatial joins. Accepts the same place names as `where`.
 
 ```bash
-overturemaps boundary "Alameda County, CA" > county.geojson
-overturemaps boundary "Brooklyn, NY" | jq '.properties'
+botmap boundary "Alameda County, CA" > county.geojson
+botmap boundary "Brooklyn, NY" | jq '.properties'
 ```
 
 `download -t division_area` is no longer supported — `boundary` is the
@@ -305,8 +305,8 @@ Row count for a query without downloading. The cheap preview that should
 precede any `download`.
 
 ```bash
-overturemaps count -t place --in "Boston, MA"
-overturemaps --json count -t place --in "Boston, MA" --where categories.primary=restaurant
+botmap count -t place --in "Boston, MA"
+botmap --json count -t place --in "Boston, MA" --where categories.primary=restaurant
 ```
 
 #### `sample`
@@ -314,8 +314,8 @@ overturemaps --json count -t place --in "Boston, MA" --where categories.primary=
 Emit the first N features matching a query. Defaults to `geojsonseq` and N=10.
 
 ```bash
-overturemaps sample -t building --in "Brooklyn" --where 'height>100' -n 5
-overturemaps sample -t place --in "Brooklyn" --where categories.primary=coffee_shop -n 3
+botmap sample -t building --in "Brooklyn" --where 'height>100' -n 5
+botmap sample -t place --in "Brooklyn" --where categories.primary=coffee_shop -n 3
 ```
 
 #### `themes`, `types`, `schema`
@@ -323,9 +323,9 @@ overturemaps sample -t place --in "Brooklyn" --where categories.primary=coffee_s
 Introspect what's queryable.
 
 ```bash
-overturemaps themes                       # 6 themes with one-line descriptions
-overturemaps types --theme buildings      # 2 types in this theme
-overturemaps --json schema -t place       # full field list + a sample feature
+botmap themes                       # 6 themes with one-line descriptions
+botmap types --theme buildings      # 2 types in this theme
+botmap --json schema -t place       # full field list + a sample feature
 ```
 
 #### `categories -t place`
@@ -333,8 +333,8 @@ overturemaps --json schema -t place       # full field list + a sample feature
 Enumerate `categories.primary` values (with counts) for a place-scoped region.
 
 ```bash
-overturemaps categories -t place --in "Brooklyn" --top 20
-overturemaps --json categories -t place --in "Manhattan" --top 50 | jq -r '.[] | "\(.count)\t\(.value)"'
+botmap categories -t place --in "Brooklyn" --top 20
+botmap --json categories -t place --in "Manhattan" --top 50 | jq -r '.[] | "\(.count)\t\(.value)"'
 ```
 
 #### `capabilities`
@@ -343,7 +343,7 @@ Emit a machine-readable manifest of all subcommands with their parameters.
 Agents read this once to learn the CLI surface.
 
 ```bash
-overturemaps --json capabilities | jq '.commands[].name'
+botmap --json capabilities | jq '.commands[].name'
 ```
 
 #### `places`, `buildings`, `roads`, `addresses`, `water`, `landuse`
@@ -362,26 +362,26 @@ Transit stops (`bus_stop`, `bus_station`, `train_station`) are `place` features 
 
 ```bash
 # POIs by category (named place)
-overturemaps places --in "Brooklyn" --category hospital -f geojsonseq -o hospitals.jsonl
+botmap places --in "Brooklyn" --category hospital -f geojsonseq -o hospitals.jsonl
 
 # POIs by category (manual bbox — skip the named-place lookup)
-overturemaps places --bbox=-122.295,37.778,-122.265,37.800 --category coffee_shop
+botmap places --bbox=-122.295,37.778,-122.265,37.800 --category coffee_shop
 
 # Buildings filtered by attribute
-overturemaps buildings --in "Manhattan" --where 'height>150' -f geojsonseq -o tall.jsonl
-overturemaps buildings --in "Boston, MA" --where 'num_floors>=10' --where 'height>30' -f geoparquet -o tall.parquet
+botmap buildings --in "Manhattan" --where 'height>150' -f geojsonseq -o tall.jsonl
+botmap buildings --in "Boston, MA" --where 'num_floors>=10' --where 'height>30' -f geoparquet -o tall.parquet
 
 # Roads by class
-overturemaps roads --in "Texas, US" --class motorway -f geojsonseq -o tx_highways.jsonl
-overturemaps roads --in "Berlin, DE" --where "class in [primary,secondary]" -f geojsonseq -o berlin_main.jsonl
+botmap roads --in "Texas, US" --class motorway -f geojsonseq -o tx_highways.jsonl
+botmap roads --in "Berlin, DE" --where "class in [primary,secondary]" -f geojsonseq -o berlin_main.jsonl
 
 # Addresses by street (case-insensitive substring on --street; --number / --postcode are exact)
-overturemaps addresses --in "Alameda, US-CA" --street Fountain --number 1234
-overturemaps addresses --in "Brookline, MA" --street "Main St"
+botmap addresses --in "Alameda, US-CA" --street Fountain --number 1234
+botmap addresses --in "Brookline, MA" --street "Main St"
 
 # Water and land use by class
-overturemaps water --in "Minneapolis, MN" --class lake -f geojsonseq -o lakes.jsonl
-overturemaps landuse --in "Brooklyn, NY" --class residential -f geojsonseq -o zoning.jsonl
+botmap water --in "Minneapolis, MN" --class lake -f geojsonseq -o lakes.jsonl
+botmap landuse --in "Brooklyn, NY" --class residential -f geojsonseq -o zoning.jsonl
 ```
 
 `places` includes a zero-result hint: when `--category X` (or
@@ -392,8 +392,8 @@ what's actually there. So `--category ferry_terminal` in a bbox where
 only `ferry_boat_company` exists yields:
 
 ```
-[overturemaps] 0 rows. No place has categories.primary='ferry_terminal' in
-this bbox. Did you mean: ferry_boat_company? Run `overturemaps categories
+[botmap] 0 rows. No place has categories.primary='ferry_terminal' in
+this bbox. Did you mean: ferry_boat_company? Run `botmap categories
 -t place --bbox …` to see the full list.
 ```
 
@@ -409,10 +409,10 @@ filters apply just like the intent verbs, so this is the right command for
 "X near a point."
 
 ```bash
-overturemaps at 40.7484,-73.9857                          # POIs near the Empire State Building
-overturemaps at 37.8270,-122.4230 -t place \
+botmap at 40.7484,-73.9857                          # POIs near the Empire State Building
+botmap at 37.8270,-122.4230 -t place \
   --radius 1500 --where "categories.primary=restaurant" -n 5
-overturemaps at 51.5074,-0.1278 -t building -n 3
+botmap at 51.5074,-0.1278 -t building -n 3
 ```
 
 Use `at … --where …` instead of constructing a manual bbox + `download`.
@@ -424,8 +424,8 @@ distance.
 Which admin divisions contain this point, innermost-first.
 
 ```bash
-overturemaps containing 42.3601,-71.0589
-overturemaps --json containing 35.6762,139.6503 | jq -r '.[] | "\(.subtype)\t\(.name)"'
+botmap containing 42.3601,-71.0589
+botmap --json containing 35.6762,139.6503 | jq -r '.[] | "\(.subtype)\t\(.name)"'
 ```
 
 #### `install-skill`
@@ -435,22 +435,22 @@ Install the agent-discoverable Skill for Claude Code and/or write an
 question implies geospatial data.
 
 ```bash
-overturemaps install-skill                              # interactive
-overturemaps install-skill --target claude-user --yes   # scripted
-overturemaps install-skill --target agents-md --yes     # writes ./AGENTS.md
+botmap install-skill                              # interactive
+botmap install-skill --target claude-user --yes   # scripted
+botmap install-skill --target agents-md --yes     # writes ./AGENTS.md
 ```
 
 #### `cache info|clear|build`
 
 The first `--in` or `containing` call builds an on-disk divisions index under
-`$XDG_CACHE_HOME/overturemaps/` (default `~/.cache/overturemaps/`). The index
+`$XDG_CACHE_HOME/botmap/` (default `~/.cache/botmap/`). The index
 is keyed by Overture release and rebuilds automatically when the latest
 release changes; these commands let you inspect or force the lifecycle.
 
 ```bash
-overturemaps cache info                # path, current release, up-to-date status
-overturemaps cache build               # force a rebuild against the latest release
-overturemaps cache clear               # remove all cached index files
+botmap cache info                # path, current release, up-to-date status
+botmap cache build               # force a rebuild against the latest release
+botmap cache clear               # remove all cached index files
 ```
 
 #### `gers [UUID]`
@@ -466,7 +466,7 @@ Command-line options:
 
 ## Python API
 
-`overturemaps` is also a Python library. Import directly from `overturemaps` to query Overture data
+`botmap` is also a Python library. Import directly from `botmap` to query Overture data
 without using the CLI.
 
 #### Place-name geocoding
@@ -475,7 +475,7 @@ without using the CLI.
 pick. Both read a small on-disk index that builds lazily on first call.
 
 ```python
-from overturemaps import best_match, resolve
+from botmap import best_match, resolve
 
 pick = best_match("Boston, MA")
 print(pick.name, pick.region, pick.bbox)
@@ -492,7 +492,7 @@ for d in all_bostons:
 `count_rows` returns the row count for a query without streaming data.
 
 ```python
-from overturemaps import best_match, count_rows
+from botmap import best_match, count_rows
 
 division = best_match("Brooklyn")
 n = count_rows("place", bbox=division.bbox, stac=True)
@@ -505,7 +505,7 @@ print(f"Brooklyn has {n:,} places")
 This is the lowest-level entry point and works with any Arrow-compatible tool.
 
 ```python
-from overturemaps import record_batch_reader
+from botmap import record_batch_reader
 
 bbox = (-71.068, 42.353, -71.058, 42.363)  # xmin, ymin, xmax, ymax
 reader = record_batch_reader("building", bbox=bbox)
@@ -520,8 +520,8 @@ Build them by parsing CLI-style expressions or constructing `ParsedFilter`
 instances directly:
 
 ```python
-from overturemaps import record_batch_reader, best_match
-from overturemaps.filters import parse_where_expr
+from botmap import record_batch_reader, best_match
+from botmap.filters import parse_where_expr
 
 bbox = best_match("Manhattan").bbox
 filters = [parse_where_expr("height>100"), parse_where_expr("num_floors>=10")]
@@ -532,10 +532,10 @@ table = reader.read_all()
 #### GeoDataFrame (geopandas)
 
 `geodataframe` loads data directly into a `geopandas.GeoDataFrame`. Requires `geopandas` to be
-installed (`pip install overturemaps[geopandas]` or `pip install geopandas`).
+installed (`pip install botmap[geopandas]` or `pip install geopandas`).
 
 ```python
-from overturemaps import geodataframe, best_match
+from botmap import geodataframe, best_match
 
 bbox = best_match("Boston, MA").bbox
 gdf = geodataframe("building", bbox=bbox)
@@ -544,12 +544,12 @@ print(gdf.head())
 
 #### Writing to a file format
 
-Use `get_writer` and `copy` from `overturemaps.writers` to write data to GeoJSON, GeoJSONSeq, or
+Use `get_writer` and `copy` from `botmap.writers` to write data to GeoJSON, GeoJSONSeq, or
 GeoParquet without the CLI:
 
 ```python
-from overturemaps import record_batch_reader
-from overturemaps.writers import copy, get_writer
+from botmap import record_batch_reader
+from botmap.writers import copy, get_writer
 
 bbox = (-71.068, 42.353, -71.058, 42.363)
 reader = record_batch_reader("building", bbox=bbox)
@@ -562,28 +562,28 @@ Supported format strings: `"geojson"`, `"geojsonseq"`, `"geoparquet"`.
 
 ## Installation
 
-overturemaps is available via [Homebrew](https://brew.sh/):
+botmap is available via [Homebrew](https://brew.sh/):
 
 ```bash
-brew install overturemaps
+brew install botmap
 ```
 
-To install overturemaps from [PyPi](https://pypi.org/project/overturemaps/) using pip:
+To install botmap from [PyPi](https://pypi.org/project/botmap/) using pip:
 
 ```bash
-pip install overturemaps
+pip install botmap
 ```
 
-overturemaps is also on [conda-forge](https://anaconda.org/conda-forge/overturemaps) and can be installed using conda, mamba, or pixi. To install overturemaps using conda:
+botmap is also on [conda-forge](https://anaconda.org/conda-forge/botmap) and can be installed using conda, mamba, or pixi. To install botmap using conda:
 
 ```bash
-conda install -c conda-forge overturemaps
+conda install -c conda-forge botmap
 ```
 
-If you have [uv](https://docs.astral.sh/uv/) installed, you can run overturemaps [with uvx](https://docs.astral.sh/uv/guides/tools/#running-tools) without installing it:
+If you have [uv](https://docs.astral.sh/uv/) installed, you can run botmap [with uvx](https://docs.astral.sh/uv/guides/tools/#running-tools) without installing it:
 
 ```bash
-uvx overturemaps download --bbox=-71.068,42.353,-71.058,42.363 -f geojson --type=building -o boston.parquet
+uvx botmap download --bbox=-71.068,42.353,-71.058,42.363 -f geojson --type=building -o boston.parquet
 ```
 
 ## Performance
@@ -631,7 +631,7 @@ Each run produces three artifacts:
 | Artifact | What it contains |
 |---|---|
 | `evals/runs/<id>__r<n>/transcript.jsonl` | Full Claude Code session transcript |
-| `evals/runs/<id>__r<n>/shim.log` | Every `overturemaps` call with exit codes |
+| `evals/runs/<id>__r<n>/shim.log` | Every `botmap` call with exit codes |
 | `evals/runs/<id>__r<n>/record.json` | Scored metrics for that run |
 | `evals/report.md` | Ranked failure clusters + per-question rates |
 | `evals/proposals.json` | Concrete CLI/skill/docs improvement proposals |
@@ -685,7 +685,7 @@ columns in the per-question table:
 
 The runner sets up an isolated working directory per run, installs the Overture
 skill so the agent can discover the CLI, and puts a logging shim first on PATH.
-The shim intercepts every `overturemaps` call, records the arguments and exit
+The shim intercepts every `botmap` call, records the arguments and exit
 code to `shim.log`, then forwards the call to the real binary. After all runs
 complete, the scorer reads each `shim.log` and transcript to produce
 `record.json`, and the synthesizer aggregates those records into the final report

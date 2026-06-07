@@ -3,7 +3,7 @@
 import click
 import pytest
 
-from overturemaps.cli import validate_gers_id
+from botmap.cli import validate_gers_id
 
 
 def test_validate_gers_id_valid_uuid():

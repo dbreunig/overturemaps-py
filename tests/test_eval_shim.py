@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SHIM = Path(__file__).resolve().parent.parent / "evals" / "shim" / "overturemaps"
+SHIM = Path(__file__).resolve().parent.parent / "evals" / "shim" / "botmap"
 
 
 def _run(args, env_extra):
@@ -19,7 +19,7 @@ def test_shim_passes_through_stdout_and_exit_code(tmp_path):
     log = tmp_path / "shim.log"
     proc = _run(["--version"], {"OVERTURE_EVAL_LOG": str(log)})
     assert proc.returncode == 0
-    assert "overturemaps" in (proc.stdout + proc.stderr).lower() or proc.stdout.strip()
+    assert "botmap" in (proc.stdout + proc.stderr).lower() or proc.stdout.strip()
 
 
 def test_shim_logs_the_invocation(tmp_path):

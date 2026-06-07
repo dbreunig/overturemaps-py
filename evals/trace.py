@@ -9,7 +9,7 @@ from pathlib import Path
 
 @dataclass
 class ShimCall:
-    """One `overturemaps` invocation captured by the PATH shim.
+    """One `botmap` invocation captured by the PATH shim.
 
     `argv` is the argument list passed to the CLI (program name excluded),
     e.g. ["places", "--in", "Brooklyn"].

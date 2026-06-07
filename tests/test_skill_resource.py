@@ -4,7 +4,7 @@ from importlib import resources
 
 
 def test_skill_md_present():
-    files = resources.files("overturemaps") / "data" / "skill.md"
+    files = resources.files("botmap") / "data" / "skill.md"
     text = files.read_text()
-    assert "name: overturemaps" in text
+    assert "name: botmap" in text
     assert "When to reach for this CLI" in text

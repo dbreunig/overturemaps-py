@@ -8,21 +8,21 @@ from importlib import resources
 from pathlib import Path
 
 
-AGENTS_START_MARKER = "<!-- overturemaps:start -->"
-AGENTS_END_MARKER = "<!-- overturemaps:end -->"
+AGENTS_START_MARKER = "<!-- botmap:start -->"
+AGENTS_END_MARKER = "<!-- botmap:end -->"
 
 
 def _skill_content() -> str:
     """Return the canonical SKILL.md content shipped with the package."""
-    return (resources.files("overturemaps") / "data" / "skill.md").read_text()
+    return (resources.files("botmap") / "data" / "skill.md").read_text()
 
 
 def _claude_user_dir() -> Path:
-    return Path(os.environ.get("HOME", "~")).expanduser() / ".claude" / "skills" / "overturemaps"
+    return Path(os.environ.get("HOME", "~")).expanduser() / ".claude" / "skills" / "botmap"
 
 
 def _claude_project_dir() -> Path:
-    return Path.cwd() / ".claude" / "skills" / "overturemaps"
+    return Path.cwd() / ".claude" / "skills" / "botmap"
 
 
 def install_claude_user() -> Path:
@@ -53,7 +53,7 @@ def _agents_md_section() -> str:
 
 
 def install_agents_md() -> Path:
-    """Insert or replace the overturemaps section in ./AGENTS.md."""
+    """Insert or replace the botmap section in ./AGENTS.md."""
     target = Path.cwd() / "AGENTS.md"
     section = _agents_md_section()
     if not target.exists():

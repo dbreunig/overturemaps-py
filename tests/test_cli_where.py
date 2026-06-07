@@ -5,8 +5,8 @@ import json
 import pytest
 from click.testing import CliRunner
 
-from overturemaps.cli import cli
-from overturemaps.geocoding import Division
+from botmap.cli import cli
+from botmap.geocoding import Division
 
 
 _BOSTON = Division(
@@ -25,7 +25,7 @@ def fake_match(monkeypatch):
         captured["query"] = query
         return [_BOSTON]
 
-    monkeypatch.setattr("overturemaps.cli.resolve", fake_resolve)
+    monkeypatch.setattr("botmap.cli.resolve", fake_resolve)
     return captured
 
 
@@ -50,14 +50,14 @@ def test_where_json_output(fake_match):
 
 
 def test_where_no_match(monkeypatch):
-    monkeypatch.setattr("overturemaps.cli.resolve", lambda q: [])
+    monkeypatch.setattr("botmap.cli.resolve", lambda q: [])
     runner = CliRunner()
     result = runner.invoke(cli, ["where", "Nonexistentville"])
     assert result.exit_code != 0
 
 
 def test_where_no_match_json(monkeypatch):
-    monkeypatch.setattr("overturemaps.cli.resolve", lambda q: [])
+    monkeypatch.setattr("botmap.cli.resolve", lambda q: [])
     runner = CliRunner()
     result = runner.invoke(cli, ["--json", "where", "Nonexistentville"])
     assert result.exit_code != 0
@@ -93,7 +93,7 @@ def test_where_no_match_suggests_bare_name(monkeypatch):
     def fake_resolve(q):
         return [_WILLIAMSBURG_VA] if q == "Williamsburg" else []
 
-    monkeypatch.setattr("overturemaps.cli.resolve", fake_resolve)
+    monkeypatch.setattr("botmap.cli.resolve", fake_resolve)
     runner = CliRunner()
     result = runner.invoke(cli, ["where", "Williamsburg, Brooklyn"])
     assert result.exit_code != 0
@@ -107,7 +107,7 @@ def test_where_no_match_json_includes_suggestion(monkeypatch):
     def fake_resolve(q):
         return [_WILLIAMSBURG_VA] if q == "Williamsburg" else []
 
-    monkeypatch.setattr("overturemaps.cli.resolve", fake_resolve)
+    monkeypatch.setattr("botmap.cli.resolve", fake_resolve)
     runner = CliRunner()
     result = runner.invoke(cli, ["--json", "where", "Williamsburg, Brooklyn"])
     assert result.exit_code != 0
@@ -120,15 +120,15 @@ def test_where_geometry_emits_geojson_feature(monkeypatch):
     """`where --geometry` emits the division_area polygon as a GeoJSON Feature."""
     from shapely.geometry import box
 
-    monkeypatch.setattr("overturemaps.cli.resolve", lambda q: [_BOSTON])
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.resolve", lambda q: [_BOSTON])
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
 
     def fake_prefetch(ids, lon, lat, release):
-        import overturemaps.cli as c
+        import botmap.cli as c
         c._polygon_cache[ids[0]] = box(-71.19, 42.23, -70.99, 42.40)
 
-    monkeypatch.setattr("overturemaps.cli._prefetch_polygons", fake_prefetch)
+    monkeypatch.setattr("botmap.cli._prefetch_polygons", fake_prefetch)
 
     runner = CliRunner()
     result = runner.invoke(cli, ["where", "Boston, MA", "--geometry"])
@@ -144,15 +144,15 @@ def test_where_geojson_alias_flag(monkeypatch):
     """`--geojson` is an accepted alias for `--geometry`."""
     from shapely.geometry import box
 
-    monkeypatch.setattr("overturemaps.cli.resolve", lambda q: [_BOSTON])
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.resolve", lambda q: [_BOSTON])
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
 
     def fake_prefetch(ids, lon, lat, release):
-        import overturemaps.cli as c
+        import botmap.cli as c
         c._polygon_cache[ids[0]] = box(-71.19, 42.23, -70.99, 42.40)
 
-    monkeypatch.setattr("overturemaps.cli._prefetch_polygons", fake_prefetch)
+    monkeypatch.setattr("botmap.cli._prefetch_polygons", fake_prefetch)
 
     runner = CliRunner()
     result = runner.invoke(cli, ["where", "Boston, MA", "--geojson"])
@@ -172,9 +172,9 @@ def test_resolve_in_place_falls_back_via_parent_region(monkeypatch):
             return [_WILLIAMSBURG_NY]
         return []
 
-    monkeypatch.setattr("overturemaps.cli.resolve", fake_resolve)
-    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2025-12-17.0")
-    monkeypatch.setattr("overturemaps.cli.count_rows", lambda *a, **k: 7)
+    monkeypatch.setattr("botmap.cli.resolve", fake_resolve)
+    monkeypatch.setattr("botmap.cli.get_latest_release", lambda: "2025-12-17.0")
+    monkeypatch.setattr("botmap.cli.count_rows", lambda *a, **k: 7)
 
     runner = CliRunner()
     result = runner.invoke(cli, ["count", "-t", "place", "--in", "Williamsburg, Brooklyn"])
@@ -194,9 +194,9 @@ def test_resolve_in_place_falls_back_to_parent_bbox(monkeypatch):
             return []          # Not in the index at all
         return []
 
-    monkeypatch.setattr("overturemaps.cli.resolve", fake_resolve)
-    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2025-12-17.0")
-    monkeypatch.setattr("overturemaps.cli.count_rows", lambda *a, **k: 42)
+    monkeypatch.setattr("botmap.cli.resolve", fake_resolve)
+    monkeypatch.setattr("botmap.cli.get_latest_release", lambda: "2025-12-17.0")
+    monkeypatch.setattr("botmap.cli.count_rows", lambda *a, **k: 42)
 
     runner = CliRunner()
     result = runner.invoke(cli, ["count", "-t", "place", "--in", "SoHo, Brooklyn"])
@@ -207,15 +207,15 @@ def test_resolve_in_place_falls_back_to_parent_bbox(monkeypatch):
 
 def test_where_geometry_no_polygon_errors(monkeypatch):
     """When no division_area polygon exists, --geometry errors cleanly."""
-    monkeypatch.setattr("overturemaps.cli.resolve", lambda q: [_BOSTON])
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.resolve", lambda q: [_BOSTON])
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
 
     def fake_prefetch(ids, lon, lat, release):
-        import overturemaps.cli as c
+        import botmap.cli as c
         c._polygon_cache[ids[0]] = None
 
-    monkeypatch.setattr("overturemaps.cli._prefetch_polygons", fake_prefetch)
+    monkeypatch.setattr("botmap.cli._prefetch_polygons", fake_prefetch)
 
     runner = CliRunner()
     result = runner.invoke(cli, ["where", "Boston, MA", "--geometry"])
@@ -237,7 +237,7 @@ def test_where_ambiguous_shows_hint(monkeypatch):
         bbox=(-102.3, 49.2, -102.2, 49.3),
     )
     monkeypatch.setattr(
-        "overturemaps.cli.resolve",
+        "botmap.cli.resolve",
         lambda q: [alameda_ca, alameda_sk],
     )
     runner = CliRunner()
@@ -265,7 +265,7 @@ def test_where_all_lists_every_match(monkeypatch):
         bbox=(-102.3, 49.2, -102.2, 49.3),
     )
     monkeypatch.setattr(
-        "overturemaps.cli.resolve",
+        "botmap.cli.resolve",
         lambda q: [alameda_ca, alameda_sk],
     )
     runner = CliRunner()

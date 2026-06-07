@@ -5,14 +5,14 @@ import json
 import pytest
 from click.testing import CliRunner
 
-from overturemaps.cli import cli
-from overturemaps.geocoding import Division
+from botmap.cli import cli
+from botmap.geocoding import Division
 
 
 def test_count_with_bbox(monkeypatch):
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
-    monkeypatch.setattr("overturemaps.cli.count_rows",
+    monkeypatch.setattr("botmap.cli.count_rows",
                         lambda *a, **k: 12345)
 
     runner = CliRunner()
@@ -24,9 +24,9 @@ def test_count_with_bbox(monkeypatch):
 
 
 def test_count_json(monkeypatch):
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
-    monkeypatch.setattr("overturemaps.cli.count_rows",
+    monkeypatch.setattr("botmap.cli.count_rows",
                         lambda *a, **k: 12345)
 
     runner = CliRunner()
@@ -43,10 +43,10 @@ def test_count_json(monkeypatch):
 
 def test_count_with_in_and_where(monkeypatch):
     captured = {}
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
     monkeypatch.setattr(
-        "overturemaps.cli.resolve",
+        "botmap.cli.resolve",
         lambda q: [Division(
             id="x", name="Boston", subtype="locality",
             country="US", region="US-MA",
@@ -60,7 +60,7 @@ def test_count_with_in_and_where(monkeypatch):
         captured["where_filters"] = kwargs.get("where_filters")
         return 42
 
-    monkeypatch.setattr("overturemaps.cli.count_rows", fake_count)
+    monkeypatch.setattr("botmap.cli.count_rows", fake_count)
 
     runner = CliRunner()
     result = runner.invoke(cli, [

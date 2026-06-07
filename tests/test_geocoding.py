@@ -6,7 +6,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from overturemaps.geocoding import resolve, best_match, Division
+from botmap.geocoding import resolve, best_match, Division
 
 
 def _build_index_file(tmp_path: Path) -> Path:
@@ -50,7 +50,7 @@ def _build_index_file(tmp_path: Path) -> Path:
         "bbox_xmax": [-66.0, -69.9, -70.99, 0.20, -71.07, 0.20, -121.97, -122.21, -102.20],
         "bbox_ymax": [71.0, 42.9, 42.40, 53.10, 42.42, 52.22, 37.94, 37.79, 49.30],
     })
-    out = tmp_path / "overturemaps" / "divisions-index-2025-12-17.0.parquet"
+    out = tmp_path / "botmap" / "divisions-index-2025-12-17.0.parquet"
     out.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(table, out)
     return out
@@ -62,7 +62,7 @@ def fake_index(monkeypatch, tmp_path):
     _build_index_file(tmp_path)
     # Skip the network lookup that ensure_index would do
     monkeypatch.setattr(
-        "overturemaps.geocoding._latest_release", lambda: "2025-12-17.0",
+        "botmap.geocoding._latest_release", lambda: "2025-12-17.0",
     )
     return tmp_path
 

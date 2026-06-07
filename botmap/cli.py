@@ -207,7 +207,7 @@ def _resolve_in_place(in_place: str):
                 if scoped:
                     result = scoped[0]
                     click.secho(
-                        f"[overturemaps] {in_place!r} not in divisions index; "
+                        f"[botmap] {in_place!r} not in divisions index; "
                         f"resolved via parent {qualifier!r} → "
                         f"using {_describe_division(result)}",
                         fg="yellow", err=True,
@@ -216,7 +216,7 @@ def _resolve_in_place(in_place: str):
             # Couldn't find the name in the parent's region — use the parent's
             # bbox directly so the query still runs over a bounded area.
             click.secho(
-                f"[overturemaps] {in_place!r} not in divisions index; "
+                f"[botmap] {in_place!r} not in divisions index; "
                 f"using parent {qualifier!r} "
                 f"({_describe_division(parent)}) bbox instead",
                 fg="yellow", err=True,
@@ -228,10 +228,10 @@ def _resolve_in_place(in_place: str):
         alt = matches[1]
         more = f" (+{len(matches) - 2} more)" if len(matches) > 2 else ""
         click.secho(
-            f"[overturemaps] Ambiguous --in {in_place!r}: picked "
+            f"[botmap] Ambiguous --in {in_place!r}: picked "
             f"{_describe_division(picked)} over "
             f"{_describe_division(alt)}{more}. "
-            f"Run `overturemaps where {in_place!r} --all` to see all.",
+            f"Run `botmap where {in_place!r} --all` to see all.",
             fg="yellow", err=True,
         )
     return picked
@@ -322,7 +322,7 @@ def _suggest_verb_command(
     verb: str, in_place, bbox, where_exprs, output_format, output
 ) -> str:
     """Build a concrete ready-to-run verb command from download flags."""
-    parts = [f"overturemaps {verb}"]
+    parts = [f"botmap {verb}"]
     if in_place:
         parts.append(f'--in "{in_place}"')
     elif bbox is not None:
@@ -350,7 +350,7 @@ def _print_banner():
         banner = pyfiglet.figlet_format("Overture Maps", font="slant")
     except Exception:
         banner = "Overture Maps\n"
-    version = importlib.metadata.version("overturemaps")
+    version = importlib.metadata.version("botmap")
     click.secho(banner.rstrip(), fg="blue", bold=True, err=True)
     click.secho(f"  v{version}  |  overturemaps.org\n", fg="bright_blue", err=True)
 
@@ -441,8 +441,8 @@ def validate_gers_id(ctx, param, value):
 
 @click.group(invoke_without_command=True)
 @click.version_option(
-    version=importlib.metadata.version("overturemaps"),
-    prog_name="overturemaps",
+    version=importlib.metadata.version("botmap"),
+    prog_name="botmap",
 )
 @click.option("--json", "json_output", is_flag=True, default=False,
               help="Emit machine-readable JSON for metadata commands.")
@@ -513,7 +513,7 @@ def download(
                 f"for a boundary polygon run: {suggestion}"
             )
         click.secho(
-            f"[overturemaps] Tip: try instead: {suggestion}",
+            f"[botmap] Tip: try instead: {suggestion}",
             fg="bright_black", err=True,
         )
     elif type_ == "infrastructure":
@@ -530,12 +530,12 @@ def download(
             )
             raise click.UsageError(
                 f"Transit stops are `place` features, not infrastructure — run: "
-                f"overturemaps places --category bus_stop {loc_flag}"
+                f"botmap places --category bus_stop {loc_flag}"
             )
         click.secho(
-            "[overturemaps] Tip: transit stops (bus_stop, bus_station, "
+            "[botmap] Tip: transit stops (bus_stop, bus_station, "
             "train_station) are `place` features — use "
-            "`overturemaps places --category bus_stop`. "
+            "`botmap places --category bus_stop`. "
             "For non-transit infrastructure, download is correct.",
             fg="bright_black", err=True,
         )
@@ -959,7 +959,7 @@ def schema(ctx, type_, release):
 @click.option("-t", "--type", "type_",
               type=str, default="place", show_default=True,
               help="Feature type to enumerate. Only `place` is supported; "
-                   "other types use `class` — see `overturemaps schema -t TYPE`.")
+                   "other types use `class` — see `botmap schema -t TYPE`.")
 @click.option("--bbox", required=False, type=BboxParamType())
 @click.option("--in", "in_place", required=False, type=str)
 @click.option("--top", default=20, show_default=True, type=int)
@@ -974,12 +974,12 @@ def categories(ctx, type_, bbox, in_place, top, release):
             raise click.UsageError(
                 f"`categories` enumerates `categories.primary` for place features. "
                 f"For `{type_}`, the classifying field is `class` — run "
-                f"`overturemaps --json schema -t {type_}` to see available values, "
-                f"or filter directly with `overturemaps {verb} --class <value>`."
+                f"`botmap --json schema -t {type_}` to see available values, "
+                f"or filter directly with `botmap {verb} --class <value>`."
             )
         raise click.UsageError(
             f"`categories` only enumerates `categories.primary` for place features. "
-            f"Run `overturemaps --json schema -t {type_}` to inspect available fields."
+            f"Run `botmap --json schema -t {type_}` to inspect available fields."
         )
     if bbox is not None and in_place is not None:
         raise click.UsageError("--bbox and --in are mutually exclusive")
@@ -1029,7 +1029,7 @@ def categories(ctx, type_, bbox, in_place, top, release):
 def capabilities(ctx):
     """Emit a machine-readable manifest of all subcommands."""
     payload = {
-        "version": importlib.metadata.version("overturemaps"),
+        "version": importlib.metadata.version("botmap"),
         "commands": _walk_group(cli),
     }
     if ctx.obj.get("json"):
@@ -1147,18 +1147,18 @@ def places(in_place, bbox, category, where_exprs, output_format, output, release
                 hits = _suggest_categories("place", bbox, release, str(target))
                 if hits:
                     click.secho(
-                        f"[overturemaps] 0 rows. No place has "
+                        f"[botmap] 0 rows. No place has "
                         f"categories.primary={target!r} in this bbox. "
                         f"Did you mean: {', '.join(hits)}? "
-                        f"Run `overturemaps categories -t place --bbox …` "
+                        f"Run `botmap categories -t place --bbox …` "
                         f"to see the full list.",
                         fg="yellow", err=True,
                     )
                 else:
                     click.secho(
-                        f"[overturemaps] 0 rows. categories.primary={target!r} "
+                        f"[botmap] 0 rows. categories.primary={target!r} "
                         f"is not present in this bbox. Run "
-                        f"`overturemaps categories -t place --bbox …` "
+                        f"`botmap categories -t place --bbox …` "
                         f"to see what's available.",
                         fg="yellow", err=True,
                     )
@@ -1870,8 +1870,8 @@ def changelog_query(bbox, theme, type_, release):
     """Query changelog for changes within a bounding box.
 
     Examples:
-        overturemaps changelog query --bbox=-97.8,30.2,-97.6,30.4 --theme=buildings --type=building
-        overturemaps changelog query --bbox=-97.8,30.2,-97.6,30.4 --theme=buildings
+        botmap changelog query --bbox=-97.8,30.2,-97.6,30.4 --theme=buildings --type=building
+        botmap changelog query --bbox=-97.8,30.2,-97.6,30.4 --theme=buildings
     """
     bbox_obj = BBox(xmin=bbox[0], ymin=bbox[1], xmax=bbox[2], ymax=bbox[3])
 
@@ -1937,9 +1937,9 @@ def changelog_summary(theme, type_, release):
     """Get aggregate statistics for changelog without bbox filtering.
 
     Examples:
-        overturemaps changelog summary --theme=buildings
-        overturemaps changelog summary --type=building
-        overturemaps changelog summary  # All themes/types
+        botmap changelog summary --theme=buildings
+        botmap changelog summary --type=building
+        botmap changelog summary  # All themes/types
     """
     click.secho(f"Summarizing changelog for release {release}...", fg="bright_black")
     click.echo()

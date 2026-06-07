@@ -3,7 +3,7 @@
 import pyarrow as pa
 import pytest
 
-from overturemaps.core import (
+from botmap.core import (
     _binary_search_manifest,
     _coerce_bbox,
     _dataset_path,
@@ -11,7 +11,7 @@ from overturemaps.core import (
     get_all_overture_types,
     type_theme_map,
 )
-from overturemaps.models import BBox
+from botmap.models import BBox
 
 
 class TestCoerceBbox:

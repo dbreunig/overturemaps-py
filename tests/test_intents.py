@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from overturemaps.intents import bbox_around_point, haversine_meters
+from botmap.intents import bbox_around_point, haversine_meters
 
 
 class TestBboxAroundPoint:

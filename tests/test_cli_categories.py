@@ -6,7 +6,7 @@ import pyarrow as pa
 import pytest
 from click.testing import CliRunner
 
-from overturemaps.cli import cli
+from botmap.cli import cli
 
 
 def test_categories_returns_top_values(monkeypatch):
@@ -34,9 +34,9 @@ def test_categories_returns_top_values(monkeypatch):
             self._done = True
             return pa.RecordBatch.from_pylist(rows, schema=schema)
 
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader",
+    monkeypatch.setattr("botmap.cli.record_batch_reader",
                         lambda *a, **k: _Reader())
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
 
     runner = CliRunner()
@@ -55,7 +55,7 @@ def test_categories_returns_top_values(monkeypatch):
 
 def test_categories_non_place_type_with_verb_gives_helpful_error(monkeypatch):
     """`categories -t land_use` should explain `class` and point to the verb."""
-    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2025-12-17.0")
+    monkeypatch.setattr("botmap.cli.get_latest_release", lambda: "2025-12-17.0")
     runner = CliRunner()
     result = runner.invoke(cli, [
         "categories", "-t", "land_use", "--bbox", "-71.1,42.3,-71.0,42.4",
@@ -68,7 +68,7 @@ def test_categories_non_place_type_with_verb_gives_helpful_error(monkeypatch):
 
 def test_categories_non_place_type_without_verb_gives_schema_hint(monkeypatch):
     """`categories -t infrastructure` should point to schema."""
-    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2025-12-17.0")
+    monkeypatch.setattr("botmap.cli.get_latest_release", lambda: "2025-12-17.0")
     runner = CliRunner()
     result = runner.invoke(cli, [
         "categories", "-t", "infrastructure", "--bbox", "-71.1,42.3,-71.0,42.4",

@@ -2,7 +2,7 @@
 
 from click.testing import CliRunner
 
-from overturemaps.cli import cli
+from botmap.cli import cli
 
 
 def test_json_flag_sets_context_object():

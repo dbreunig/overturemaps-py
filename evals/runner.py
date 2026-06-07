@@ -23,7 +23,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EVALS_DIR = REPO_ROOT / "evals"
-SHIM_PATH = EVALS_DIR / "shim" / "overturemaps"
+SHIM_PATH = EVALS_DIR / "shim" / "botmap"
 DEFAULT_QUESTIONS = EVALS_DIR / "questions.yaml"
 DEFAULT_RUNS_DIR = EVALS_DIR / "runs"
 CLAUDE_TIMEOUT_S = 900
@@ -36,7 +36,7 @@ def venv_python() -> str:
 
 
 def packaged_skill_text() -> str:
-    return (resources.files("overturemaps") / "data" / "skill.md").read_text()
+    return (resources.files("botmap") / "data" / "skill.md").read_text()
 
 
 def load_questions(path: Path) -> list[dict]:
@@ -49,20 +49,20 @@ def load_questions(path: Path) -> list[dict]:
 def ensure_cache(python: str) -> None:
     """Warm the divisions index once so runs don't measure index-build time."""
     probe = subprocess.run(
-        [python, "-m", "overturemaps", "where", "Brooklyn, US-NY", "--json"],
+        [python, "-m", "botmap", "where", "Brooklyn, US-NY", "--json"],
         capture_output=True,
         text=True,
     )
     if probe.returncode == 0:
         return
     print("[eval] warming divisions cache (one-time)...", file=sys.stderr)
-    build = subprocess.run([python, "-m", "overturemaps", "cache", "build"])
+    build = subprocess.run([python, "-m", "botmap", "cache", "build"])
     if build.returncode != 0:
         raise SystemExit("[eval] cache build failed; aborting batch")
 
 
 def install_skill(workdir: Path) -> None:
-    target = workdir / ".claude" / "skills" / "overturemaps" / "SKILL.md"
+    target = workdir / ".claude" / "skills" / "botmap" / "SKILL.md"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(packaged_skill_text())
 
@@ -73,7 +73,7 @@ def cost_guard(question: dict, python: str, max_deg2: float, strict: bool) -> bo
     if not place:
         return True
     res = subprocess.run(
-        [python, "-m", "overturemaps", "where", place, "--json"],
+        [python, "-m", "botmap", "where", place, "--json"],
         capture_output=True,
         text=True,
     )

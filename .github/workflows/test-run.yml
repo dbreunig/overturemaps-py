@@ -40,7 +40,7 @@ jobs:
         run: uv run pytest tests/ -v
 
       - name: CLI smoke test
-        run: uv run overturemaps download --bbox=-71.068,42.353,-71.058,42.363 -f geojson --type=building -o boston.geojson
+        run: uv run botmap download --bbox=-71.068,42.353,-71.058,42.363 -f geojson --type=building -o boston.geojson
 
   rollup-test-status:
     name: Check test results

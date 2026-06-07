@@ -4,7 +4,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
 
-from overturemaps.filters import parse_where_expr, ParsedFilter
+from botmap.filters import parse_where_expr, ParsedFilter
 
 
 class TestParseWhereExpr:

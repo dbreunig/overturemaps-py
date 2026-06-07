@@ -12,17 +12,17 @@ def test_clean_success_is_none():
 
 def test_ambiguous_warning_is_not_an_error():
     # The CLI prints this on exit 0 as an informational warning.
-    stderr = "[overturemaps] Ambiguous --in 'Springfield': picked Springfield, US-IL"
+    stderr = "[botmap] Ambiguous --in 'Springfield': picked Springfield, US-IL"
     assert classify_error(_call(0, stderr)) is None
 
 
 def test_bad_category_value_from_did_you_mean_hint():
-    stderr = "[overturemaps] 0 rows. No place has categories.primary='cafe'. Did you mean: coffee_shop?"
+    stderr = "[botmap] 0 rows. No place has categories.primary='cafe'. Did you mean: coffee_shop?"
     assert classify_error(_call(0, stderr)) == "bad_category_value"
 
 
 def test_bad_category_value_from_not_present_hint():
-    stderr = "[overturemaps] 0 rows. categories.primary='zzz' is not present in this bbox."
+    stderr = "[botmap] 0 rows. categories.primary='zzz' is not present in this bbox."
     assert classify_error(_call(0, stderr)) == "bad_category_value"
 
 
@@ -35,7 +35,7 @@ def test_bad_option():
 
 
 def test_usage_error_is_bad_option():
-    stderr = "Usage: overturemaps places [OPTIONS]\nError: --bbox and --in are mutually exclusive"
+    stderr = "Usage: botmap places [OPTIONS]\nError: --bbox and --in are mutually exclusive"
     assert classify_error(_call(2, stderr)) == "bad_option"
 
 

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from overturemaps.cache import (
+from botmap.cache import (
     cache_dir,
     index_path,
     cache_info,
@@ -15,13 +15,13 @@ from overturemaps.cache import (
 
 def test_cache_dir_respects_xdg(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
-    assert cache_dir() == tmp_path / "overturemaps"
+    assert cache_dir() == tmp_path / "botmap"
 
 
 def test_cache_dir_fallback_when_xdg_unset(monkeypatch, tmp_path):
     monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
     monkeypatch.setenv("HOME", str(tmp_path))
-    expected = tmp_path / ".cache" / "overturemaps"
+    expected = tmp_path / ".cache" / "botmap"
     assert cache_dir() == expected
 
 
@@ -29,7 +29,7 @@ def test_index_path_includes_release(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
     p = index_path("2025-12-17.0")
     assert p.name == "divisions-index-2025-12-17.0.parquet"
-    assert p.parent == tmp_path / "overturemaps"
+    assert p.parent == tmp_path / "botmap"
 
 
 def test_cache_info_when_no_index(monkeypatch, tmp_path):
@@ -165,7 +165,7 @@ def _fake_division_area_table():
 
 
 def test_build_index_writes_joined_parquet(monkeypatch, tmp_path):
-    from overturemaps import cache as cache_mod
+    from botmap import cache as cache_mod
 
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
 
@@ -202,7 +202,7 @@ def test_build_index_writes_joined_parquet(monkeypatch, tmp_path):
 
 def test_build_index_point_division_uses_own_bbox_with_buffer(monkeypatch, tmp_path):
     """A microhood with no division_area gets its point bbox buffered by ~1 km."""
-    from overturemaps import cache as cache_mod
+    from botmap import cache as cache_mod
     import pyarrow.parquet as pq
     import pyarrow.compute as pc
 
@@ -228,7 +228,7 @@ def test_build_index_point_division_uses_own_bbox_with_buffer(monkeypatch, tmp_p
 
 def test_build_index_polygon_division_not_buffered(monkeypatch, tmp_path):
     """Divisions with a real area polygon must not be expanded by the point buffer."""
-    from overturemaps import cache as cache_mod
+    from botmap import cache as cache_mod
     import pyarrow.parquet as pq
     import pyarrow.compute as pc
 
@@ -249,7 +249,7 @@ def test_build_index_polygon_division_not_buffered(monkeypatch, tmp_path):
 
 
 def test_ensure_index_skips_when_current(monkeypatch, tmp_path):
-    from overturemaps import cache as cache_mod
+    from botmap import cache as cache_mod
 
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
     target = cache_mod.index_path("2025-12-17.0")
@@ -268,7 +268,7 @@ def test_ensure_index_skips_when_current(monkeypatch, tmp_path):
 
 
 def test_ensure_index_rebuilds_when_stale(monkeypatch, tmp_path):
-    from overturemaps import cache as cache_mod
+    from botmap import cache as cache_mod
 
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
     old = cache_mod.index_path("2024-01-01.0")

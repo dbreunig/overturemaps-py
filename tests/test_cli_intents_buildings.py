@@ -3,8 +3,8 @@
 import pytest
 from click.testing import CliRunner
 
-from overturemaps.cli import cli
-from overturemaps.geocoding import Division
+from botmap.cli import cli
+from botmap.geocoding import Division
 
 
 class _DummyWriter:
@@ -17,10 +17,10 @@ class _DummyReader:
 
 
 def test_buildings_passes_where_through(monkeypatch):
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
     monkeypatch.setattr(
-        "overturemaps.cli.resolve",
+        "botmap.cli.resolve",
         lambda q: [Division(
             id="nyc", name="New York", subtype="locality",
             country="US", region="US-NY",
@@ -28,8 +28,8 @@ def test_buildings_passes_where_through(monkeypatch):
             bbox=(-74.05, 40.6, -73.9, 40.9),
         )],
     )
-    monkeypatch.setattr("overturemaps.cli.get_writer", lambda *a, **k: _DummyWriter())
-    monkeypatch.setattr("overturemaps.cli.copy", lambda *a, **k: None)
+    monkeypatch.setattr("botmap.cli.get_writer", lambda *a, **k: _DummyWriter())
+    monkeypatch.setattr("botmap.cli.copy", lambda *a, **k: None)
 
     captured = {}
 
@@ -39,7 +39,7 @@ def test_buildings_passes_where_through(monkeypatch):
         captured["where_filters"] = where_filters
         return _DummyReader()
 
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader", fake_reader)
+    monkeypatch.setattr("botmap.cli.record_batch_reader", fake_reader)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -56,10 +56,10 @@ def test_buildings_passes_where_through(monkeypatch):
 
 
 def test_buildings_with_bbox(monkeypatch):
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
-    monkeypatch.setattr("overturemaps.cli.get_writer", lambda *a, **k: _DummyWriter())
-    monkeypatch.setattr("overturemaps.cli.copy", lambda *a, **k: None)
+    monkeypatch.setattr("botmap.cli.get_writer", lambda *a, **k: _DummyWriter())
+    monkeypatch.setattr("botmap.cli.copy", lambda *a, **k: None)
 
     captured = {}
 
@@ -69,7 +69,7 @@ def test_buildings_with_bbox(monkeypatch):
         captured["where_filters"] = where_filters
         return _DummyReader()
 
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader", fake_reader)
+    monkeypatch.setattr("botmap.cli.record_batch_reader", fake_reader)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -112,7 +112,7 @@ def test_buildings_in_no_match_suggests_parent(monkeypatch):
     def fake_resolve(q):
         return [williamsburg_va] if q == "Williamsburg" else []
 
-    monkeypatch.setattr("overturemaps.cli.resolve", fake_resolve)
+    monkeypatch.setattr("botmap.cli.resolve", fake_resolve)
     runner = CliRunner()
     result = runner.invoke(cli, [
         "buildings", "--in", "Williamsburg, Brooklyn", "-f", "geojsonseq",

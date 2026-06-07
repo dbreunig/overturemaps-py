@@ -18,7 +18,7 @@ first run warms the divisions index cache (one-time, slow).
 ## Pieces
 
 - `questions.yaml` — the question bank (tiers 1-5, tagged `download_is_legitimate`).
-- `shim/overturemaps` — PATH shim logging every CLI call.
+- `shim/botmap` — PATH shim logging every CLI call.
 - `runner.py` — drives `claude -p` per (question x repeat) -> `runs/<id>__r<n>/`.
 - `score.py` — `runs/*/record.json` (download usage, error taxonomy, recovery, completion).
 - `synthesize.py` — `report.md` + `proposals.json`.

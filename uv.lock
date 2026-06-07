@@ -17,6 +17,65 @@ wheels = [
 ]
 
 [[package]]
+name = "botmap"
+version = "1.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "click" },
+    { name = "colorama" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "orjson" },
+    { name = "pyarrow" },
+    { name = "pyfiglet" },
+    { name = "shapely" },
+    { name = "tqdm" },
+]
+
+[package.optional-dependencies]
+geopandas = [
+    { name = "geopandas" },
+]
+
+[package.dev-dependencies]
+binary = [
+    { name = "pyinstaller" },
+    { name = "pyinstaller-hooks-contrib" },
+]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-benchmark" },
+    { name = "pytest-mock" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "click", specifier = ">=8.3.0" },
+    { name = "colorama", specifier = ">=0.4.6" },
+    { name = "geopandas", marker = "extra == 'geopandas'", specifier = ">=1.1.0" },
+    { name = "numpy", specifier = ">=1.26.4" },
+    { name = "orjson", specifier = ">=3.9.0" },
+    { name = "pyarrow", specifier = ">=15.0.2" },
+    { name = "pyfiglet", specifier = ">=1.0.2" },
+    { name = "shapely", specifier = ">=2.1.0" },
+    { name = "tqdm", specifier = ">=4.67.3" },
+]
+provides-extras = ["geopandas"]
+
+[package.metadata.requires-dev]
+binary = [
+    { name = "pyinstaller", specifier = ">=6.0" },
+    { name = "pyinstaller-hooks-contrib", specifier = ">=2024.10" },
+]
+dev = [
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-benchmark", specifier = ">=5.0.0" },
+    { name = "pytest-mock", specifier = ">=3.11.0" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+]
+
+[[package]]
 name = "certifi"
 version = "2026.1.4"
 source = { registry = "https://pypi.org/simple" }
@@ -325,65 +384,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/1d/d3/f19b47ce16820cc2c480f7f1723e17f6d411b3a295c60c8ad3aa9ff1c96a/orjson-3.11.7-cp314-cp314-win32.whl", hash = "sha256:89e13dd3f89f1c38a9c9eba5fbf7cdc2d1feca82f5f290864b4b7a6aac704576", size = 127997, upload-time = "2026-02-02T15:38:45.06Z" },
     { url = "https://files.pythonhosted.org/packages/12/df/172771902943af54bf661a8d102bdf2e7f932127968080632bda6054b62c/orjson-3.11.7-cp314-cp314-win_amd64.whl", hash = "sha256:845c3e0d8ded9c9271cd79596b9b552448b885b97110f628fb687aee2eed11c1", size = 124985, upload-time = "2026-02-02T15:38:46.388Z" },
     { url = "https://files.pythonhosted.org/packages/6f/1c/f2a8d8a1b17514660a614ce5f7aac74b934e69f5abc2700cc7ced882a009/orjson-3.11.7-cp314-cp314-win_arm64.whl", hash = "sha256:4a2e9c5be347b937a2e0203866f12bba36082e89b402ddb9e927d5822e43088d", size = 126038, upload-time = "2026-02-02T15:38:47.703Z" },
-]
-
-[[package]]
-name = "overturemaps"
-version = "1.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "click" },
-    { name = "colorama" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "orjson" },
-    { name = "pyarrow" },
-    { name = "pyfiglet" },
-    { name = "shapely" },
-    { name = "tqdm" },
-]
-
-[package.optional-dependencies]
-geopandas = [
-    { name = "geopandas" },
-]
-
-[package.dev-dependencies]
-binary = [
-    { name = "pyinstaller" },
-    { name = "pyinstaller-hooks-contrib" },
-]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-benchmark" },
-    { name = "pytest-mock" },
-    { name = "pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "click", specifier = ">=8.3.0" },
-    { name = "colorama", specifier = ">=0.4.6" },
-    { name = "geopandas", marker = "extra == 'geopandas'", specifier = ">=1.1.0" },
-    { name = "numpy", specifier = ">=1.26.4" },
-    { name = "orjson", specifier = ">=3.9.0" },
-    { name = "pyarrow", specifier = ">=15.0.2" },
-    { name = "pyfiglet", specifier = ">=1.0.2" },
-    { name = "shapely", specifier = ">=2.1.0" },
-    { name = "tqdm", specifier = ">=4.67.3" },
-]
-provides-extras = ["geopandas"]
-
-[package.metadata.requires-dev]
-binary = [
-    { name = "pyinstaller", specifier = ">=6.0" },
-    { name = "pyinstaller-hooks-contrib", specifier = ">=2024.10" },
-]
-dev = [
-    { name = "pytest", specifier = ">=8.0.0" },
-    { name = "pytest-benchmark", specifier = ">=5.0.0" },
-    { name = "pytest-mock", specifier = ">=3.11.0" },
-    { name = "pyyaml", specifier = ">=6.0.3" },
 ]
 
 [[package]]

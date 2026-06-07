@@ -4,8 +4,8 @@ import json
 import tempfile
 from pathlib import Path
 
-from overturemaps.models import BBox, Backend, PipelineState
-from overturemaps.state import get_state_path, load_state, save_state
+from botmap.models import BBox, Backend, PipelineState
+from botmap.state import get_state_path, load_state, save_state
 
 
 def test_get_state_path():

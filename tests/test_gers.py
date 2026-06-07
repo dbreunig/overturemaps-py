@@ -4,8 +4,8 @@ Tests for GERS (Global Entity Reference System) functionality.
 
 import pyarrow as pa
 import pytest
-from overturemaps.core import query_gers_registry, record_batch_reader_from_gers
-from overturemaps.models import BBox
+from botmap.core import query_gers_registry, record_batch_reader_from_gers
+from botmap.models import BBox
 
 
 class TestGersIntegration:

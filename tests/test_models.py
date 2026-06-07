@@ -1,6 +1,6 @@
 """Tests for the models module."""
 
-from overturemaps.models import BBox, Backend, PipelineState
+from botmap.models import BBox, Backend, PipelineState
 
 
 def test_bbox_as_tuple():

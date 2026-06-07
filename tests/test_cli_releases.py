@@ -2,14 +2,14 @@
 
 from click.testing import CliRunner
 
-from overturemaps.cli import cli
-from overturemaps.models import Backend, PipelineState
+from botmap.cli import cli
+from botmap.models import Backend, PipelineState
 
 
 def test_releases_list(monkeypatch):
     """`releases list` prints all releases."""
     monkeypatch.setattr(
-        "overturemaps.cli.list_releases",
+        "botmap.cli.list_releases",
         lambda: ["2025-01-01.0", "2024-12-01.0", "2024-11-01.0"],
     )
     runner = CliRunner()
@@ -22,7 +22,7 @@ def test_releases_list(monkeypatch):
 
 def test_releases_list_empty(monkeypatch):
     """`releases list` handles empty list without crashing."""
-    monkeypatch.setattr("overturemaps.cli.list_releases", lambda: [])
+    monkeypatch.setattr("botmap.cli.list_releases", lambda: [])
     runner = CliRunner()
     result = runner.invoke(cli, ["releases", "list"])
     assert result.exit_code == 0
@@ -30,7 +30,7 @@ def test_releases_list_empty(monkeypatch):
 
 def test_releases_latest(monkeypatch):
     """`releases latest` prints the latest release."""
-    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2025-01-01.0")
+    monkeypatch.setattr("botmap.cli.get_latest_release", lambda: "2025-01-01.0")
     runner = CliRunner()
     result = runner.invoke(cli, ["releases", "latest"])
     assert result.exit_code == 0
@@ -50,8 +50,8 @@ def test_releases_check_up_to_date(monkeypatch, tmp_path):
         backend=Backend.geojson,
         output=str(output_file),
     )
-    monkeypatch.setattr("overturemaps.cli.load_state", lambda path: mock_state)
-    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2025-01-01.0")
+    monkeypatch.setattr("botmap.cli.load_state", lambda path: mock_state)
+    monkeypatch.setattr("botmap.cli.get_latest_release", lambda: "2025-01-01.0")
     runner = CliRunner()
     result = runner.invoke(cli, ["releases", "check", "-o", str(output_file)])
     assert result.exit_code == 0
@@ -71,8 +71,8 @@ def test_releases_check_update_available(monkeypatch, tmp_path):
         backend=Backend.geojson,
         output=str(output_file),
     )
-    monkeypatch.setattr("overturemaps.cli.load_state", lambda path: mock_state)
-    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2025-01-01.0")
+    monkeypatch.setattr("botmap.cli.load_state", lambda path: mock_state)
+    monkeypatch.setattr("botmap.cli.get_latest_release", lambda: "2025-01-01.0")
     runner = CliRunner()
     result = runner.invoke(cli, ["releases", "check", "-o", str(output_file)])
     assert result.exit_code == 1
@@ -83,7 +83,7 @@ def test_releases_check_no_state_file(monkeypatch, tmp_path):
     """`releases check` exits 1 when no state file found."""
     output_file = tmp_path / "out.geojson"
     output_file.touch()
-    monkeypatch.setattr("overturemaps.cli.load_state", lambda path: None)
+    monkeypatch.setattr("botmap.cli.load_state", lambda path: None)
     runner = CliRunner()
     result = runner.invoke(cli, ["releases", "check", "-o", str(output_file)])
     assert result.exit_code == 1
@@ -92,7 +92,7 @@ def test_releases_check_no_state_file(monkeypatch, tmp_path):
 def test_releases_exists_true(monkeypatch):
     """`releases exists` prints true when release exists."""
 
-    monkeypatch.setattr("overturemaps.cli.release_exists", lambda release: True)
+    monkeypatch.setattr("botmap.cli.release_exists", lambda release: True)
     runner = CliRunner()
 
     result = runner.invoke(cli, ["releases", "exists", "2025-12-17.0"])
@@ -104,7 +104,7 @@ def test_releases_exists_true(monkeypatch):
 def test_releases_exists_false(monkeypatch):
     """`releases exists` fails when release does not exist."""
 
-    monkeypatch.setattr("overturemaps.cli.release_exists", lambda release: False)
+    monkeypatch.setattr("botmap.cli.release_exists", lambda release: False)
     runner = CliRunner()
 
     result = runner.invoke(cli, ["releases", "exists", "1900-01-01.0"])

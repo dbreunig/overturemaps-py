@@ -1,9 +1,9 @@
 """Tests for the changelog module."""
 
 import pytest
-from overturemaps.changelog import query_changelog_ids, summarize_changelog
-from overturemaps.models import BBox
-from overturemaps.releases import get_latest_release
+from botmap.changelog import query_changelog_ids, summarize_changelog
+from botmap.models import BBox
+from botmap.releases import get_latest_release
 
 
 @pytest.mark.integration

@@ -9,7 +9,7 @@
 
 ## 1. Purpose and Scope
 
-`overturemaps` is the official Python CLI and library for the Overture Maps Foundation. It provides:
+`botmap` is the official Python CLI and library for the Overture Maps Foundation. It provides:
 
 1. **Direct S3 streaming**: Download Overture feature data (buildings, places, roads, etc.) from S3 without intermediate staging.
 2. **Spatial filtering**: Bbox-filtered queries using per-row Parquet metadata to minimize bytes transferred.
@@ -125,10 +125,10 @@ Persisted as JSON sidecar beside output files.
 
 ## 4. Public Python API
 
-Exported from `overturemaps.__init__`:
+Exported from `botmap.__init__`:
 
 ```python
-from overturemaps import geodataframe, record_batch_reader, get_all_overture_types
+from botmap import geodataframe, record_batch_reader, get_all_overture_types
 ```
 
 ### 4.1 `record_batch_reader`
@@ -168,7 +168,7 @@ def geodataframe(
 ) -> GeoDataFrame
 ```
 
-Requires the `geopandas` extra (`pip install overturemaps[geopandas]`). Raises `ImportError("geopandas is required to use this function")` if `geopandas` is not installed.
+Requires the `geopandas` extra (`pip install botmap[geopandas]`). Raises `ImportError("geopandas is required to use this function")` if `geopandas` is not installed.
 
 ### 4.4 `geoarrow_schema_adapter`
 
@@ -182,7 +182,7 @@ Tags the `geometry` column with `ARROW:extension:name = geoarrow.wkb`. Geometry 
 
 ## 5. CLI Specification
 
-Entry point: `overturemaps`
+Entry point: `botmap`
 
 **Naked run (no subcommand)**: Prints a blue ASCII art "Overture Maps" banner (via `pyfiglet`, `slant` font) and version string to stderr, then prints standard help text to stdout.
 
@@ -191,7 +191,7 @@ Entry point: `overturemaps`
 ### 5.1 `download`
 
 ```
-overturemaps download [OPTIONS]
+botmap download [OPTIONS]
 ```
 
 | Option | Type | Required | Default | Notes |
@@ -218,7 +218,7 @@ overturemaps download [OPTIONS]
 ### 5.2 `gers`
 
 ```
-overturemaps gers [OPTIONS] GERS_ID
+botmap gers [OPTIONS] GERS_ID
 ```
 
 | Argument/Option | Notes |
@@ -235,10 +235,10 @@ overturemaps gers [OPTIONS] GERS_ID
 ### 5.3 `releases`
 
 ```
-overturemaps releases list
-overturemaps releases latest
-overturemaps releases check -o FILE
-overturemaps releases exists RELEASE
+botmap releases list
+botmap releases latest
+botmap releases check -o FILE
+botmap releases exists RELEASE
 ```
 
 | Subcommand | Behavior | Exit codes |
@@ -251,8 +251,8 @@ overturemaps releases exists RELEASE
 ### 5.4 `changelog`
 
 ```
-overturemaps changelog query [OPTIONS]
-overturemaps changelog summary [OPTIONS]
+botmap changelog query [OPTIONS]
+botmap changelog summary [OPTIONS]
 ```
 
 **`query`**:
@@ -270,7 +270,7 @@ overturemaps changelog summary [OPTIONS]
 
 ## 6. Writer Specification
 
-All writers live in `overturemaps/writers.py`. All writers implement context manager protocol (`__enter__` / `__exit__`).
+All writers live in `botmap/writers.py`. All writers implement context manager protocol (`__enter__` / `__exit__`).
 
 ### 6.0 `BaseGeoJSONWriter`
 
@@ -430,7 +430,7 @@ State file path = `{output_path}.state` (e.g. `boston.geojson.state`).
 | `tqdm` | 4.67.3 | Progress reporting |
 
 **Optional**:
-- `geopandas>=1.1.0` — `pip install overturemaps[geopandas]`
+- `geopandas>=1.1.0` — `pip install botmap[geopandas]`
 
 **Dev**:
 - `pytest>=8.0.0`, `pytest-mock>=3.11.0`, `pytest-benchmark>=5.0.0`
@@ -463,7 +463,7 @@ State file path = `{output_path}.state` (e.g. `boston.geojson.state`).
 - `_bbox_area_sq_deg()`: small box, full Earth.
 - Large bbox warning: fires at ≥1% Earth with correct size estimates.
 - No bbox warning: fires with correct size estimates.
-- `overturemaps.__main__`: importable without side effects; calls `cli()` when run as `__main__`; `python -m overturemaps --help` exits 0.
+- `botmap.__main__`: importable without side effects; calls `cli()` when run as `__main__`; `python -m botmap --help` exits 0.
 
 ### 12.3 Integration test coverage requirements
 
@@ -510,8 +510,8 @@ State file path = `{output_path}.state` (e.g. `boston.geojson.state`).
 - Trigger: `release: published` GitHub event; `workflow_dispatch` for dry-run (uploads artifacts, does not attach to release).
 - Matrix: `ubuntu-latest` (linux-x86_64), `macos-latest` (macos-arm64), `macos-13` (macos-x86_64), `windows-latest` (windows-x86_64).
 - Tool: PyInstaller `--onefile` via `uv run pyinstaller`; `--collect-all pyarrow`, `--collect-all shapely`, `--collect-data pyfiglet`.
-- Entry point: `overturemaps/__main__.py`.
-- Output naming: `overturemaps-{version}-{target}[.exe]`.
+- Entry point: `botmap/__main__.py`.
+- Output naming: `botmap-{version}-{target}[.exe]`.
 - Post-build smoke test: binary invoked with `--help`; must exit 0.
 - Release attachment: `gh release upload` with `contents: write` scoped to job level.
 
@@ -561,9 +561,9 @@ State file path = `{output_path}.state` (e.g. `boston.geojson.state`).
 - **Package manager / task runner**: `uv` + `just`
 - **Version source**: `pyproject.toml` `version` field (not dynamic)
 - **Release cadence**: Tracks Overture Maps data releases (approximately monthly)
-- **PyPI package name**: `overturemaps`
+- **PyPI package name**: `botmap`
 - **Standalone binaries**: Built via PyInstaller on release; attached to GitHub Release as assets for linux-x86_64, macos-arm64, macos-x86_64, windows-x86_64. Local build: `just build-binary`.
-- **`python -m overturemaps`**: Supported via `overturemaps/__main__.py`; same entry point used by PyInstaller.
+- **`python -m botmap`**: Supported via `botmap/__main__.py`; same entry point used by PyInstaller.
 
 Version bump checklist:
 1. Update `version` in `pyproject.toml`.

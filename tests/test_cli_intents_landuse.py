@@ -2,8 +2,8 @@
 
 from click.testing import CliRunner
 
-from overturemaps.cli import cli
-from overturemaps.geocoding import Division
+from botmap.cli import cli
+from botmap.geocoding import Division
 
 
 class _DummyWriter:
@@ -16,10 +16,10 @@ class _DummyReader:
 
 
 def _patch_common(monkeypatch, captured):
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
     monkeypatch.setattr(
-        "overturemaps.cli.resolve",
+        "botmap.cli.resolve",
         lambda q: [Division(
             id="brooklyn", name="Brooklyn", subtype="locality",
             country="US", region="US-NY",
@@ -27,8 +27,8 @@ def _patch_common(monkeypatch, captured):
             bbox=(-74.05, 40.57, -73.83, 40.74),
         )],
     )
-    monkeypatch.setattr("overturemaps.cli.get_writer", lambda *a, **k: _DummyWriter())
-    monkeypatch.setattr("overturemaps.cli.copy", lambda *a, **k: None)
+    monkeypatch.setattr("botmap.cli.get_writer", lambda *a, **k: _DummyWriter())
+    monkeypatch.setattr("botmap.cli.copy", lambda *a, **k: None)
 
     def fake_reader(type_, bbox, *a, where_filters=None, **k):
         captured["type"] = type_
@@ -36,7 +36,7 @@ def _patch_common(monkeypatch, captured):
         captured["where_filters"] = where_filters
         return _DummyReader()
 
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader", fake_reader)
+    monkeypatch.setattr("botmap.cli.record_batch_reader", fake_reader)
 
 
 def test_landuse_class_shortcut(monkeypatch):

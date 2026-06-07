@@ -3,7 +3,7 @@
 import io
 import json
 
-from overturemaps.writers import GeoJSONSeqWriter, GeoJSONWriter, get_writer
+from botmap.writers import GeoJSONSeqWriter, GeoJSONWriter, get_writer
 
 
 class TestGeoJSONSeqWriter:

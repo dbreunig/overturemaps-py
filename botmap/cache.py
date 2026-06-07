@@ -18,11 +18,11 @@ _INDEX_FILE_RE = re.compile(r"^divisions-index-(.+)\.parquet$")
 
 
 def cache_dir() -> Path:
-    """Return the overturemaps cache directory, respecting XDG_CACHE_HOME."""
+    """Return the botmap cache directory, respecting XDG_CACHE_HOME."""
     xdg = os.environ.get("XDG_CACHE_HOME")
     if xdg:
-        return Path(xdg) / "overturemaps"
-    return Path(os.environ.get("HOME", "~")).expanduser() / ".cache" / "overturemaps"
+        return Path(xdg) / "botmap"
+    return Path(os.environ.get("HOME", "~")).expanduser() / ".cache" / "botmap"
 
 
 def index_path(release: str) -> Path:

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from overturemaps.cli import cli
+from botmap.cli import cli
 
 
 def test_install_skill_non_interactive_claude_user(tmp_path, monkeypatch):
@@ -16,7 +16,7 @@ def test_install_skill_non_interactive_claude_user(tmp_path, monkeypatch):
             "install-skill", "--target", "claude-user", "--yes",
         ])
         assert result.exit_code == 0, result.output
-        expected = tmp_path / ".claude" / "skills" / "overturemaps" / "SKILL.md"
+        expected = tmp_path / ".claude" / "skills" / "botmap" / "SKILL.md"
         assert expected.exists()
 
 
@@ -31,7 +31,7 @@ def test_install_skill_multiple_targets(tmp_path, monkeypatch):
             "--yes",
         ])
         assert result.exit_code == 0, result.output
-        assert (tmp_path / ".claude" / "skills" / "overturemaps" / "SKILL.md").exists()
+        assert (tmp_path / ".claude" / "skills" / "botmap" / "SKILL.md").exists()
 
 
 def test_install_skill_rejects_unknown_target():

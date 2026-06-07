@@ -2,8 +2,8 @@
 
 from click.testing import CliRunner
 
-from overturemaps.cli import cli
-from overturemaps.geocoding import Division
+from botmap.cli import cli
+from botmap.geocoding import Division
 
 
 class _DummyWriter:
@@ -16,10 +16,10 @@ class _DummyReader:
 
 
 def _setup(monkeypatch):
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
     monkeypatch.setattr(
-        "overturemaps.cli.resolve",
+        "botmap.cli.resolve",
         lambda q: [Division(
             id="alameda", name="Alameda", subtype="locality",
             country="US", region="US-CA",
@@ -27,10 +27,10 @@ def _setup(monkeypatch):
             bbox=(-122.34, 37.71, -122.21, 37.79),
         )],
     )
-    monkeypatch.setattr("overturemaps.cli.get_writer",
+    monkeypatch.setattr("botmap.cli.get_writer",
                         lambda *a, **k: _DummyWriter())
-    monkeypatch.setattr("overturemaps.cli.copy", lambda *a, **k: None)
-    monkeypatch.setattr("overturemaps.cli.save_state", lambda *a, **k: None)
+    monkeypatch.setattr("botmap.cli.copy", lambda *a, **k: None)
+    monkeypatch.setattr("botmap.cli.save_state", lambda *a, **k: None)
 
 
 def test_addresses_with_street_substring(monkeypatch):
@@ -43,7 +43,7 @@ def test_addresses_with_street_substring(monkeypatch):
         captured["where_filters"] = where_filters
         return _DummyReader()
 
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader", fake_reader)
+    monkeypatch.setattr("botmap.cli.record_batch_reader", fake_reader)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -74,7 +74,7 @@ def test_addresses_with_bbox_and_postcode(monkeypatch):
         captured["where_filters"] = where_filters
         return _DummyReader()
 
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader", fake_reader)
+    monkeypatch.setattr("botmap.cli.record_batch_reader", fake_reader)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -114,7 +114,7 @@ def test_addresses_in_and_bbox_mutually_exclusive(monkeypatch):
 
 def test_addresses_ambiguous_in_emits_stderr_warning(monkeypatch):
     """Two candidates -> stderr warning naming both and pointing to `where --all`."""
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
     alameda_ca = Division(
         id="alameda-ca", name="Alameda", subtype="locality",
@@ -129,14 +129,14 @@ def test_addresses_ambiguous_in_emits_stderr_warning(monkeypatch):
         bbox=(-102.3, 49.2, -102.2, 49.3),
     )
     monkeypatch.setattr(
-        "overturemaps.cli.resolve",
+        "botmap.cli.resolve",
         lambda q: [alameda_ca, alameda_sk],
     )
-    monkeypatch.setattr("overturemaps.cli.get_writer",
+    monkeypatch.setattr("botmap.cli.get_writer",
                         lambda *a, **k: _DummyWriter())
-    monkeypatch.setattr("overturemaps.cli.copy", lambda *a, **k: None)
-    monkeypatch.setattr("overturemaps.cli.save_state", lambda *a, **k: None)
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader",
+    monkeypatch.setattr("botmap.cli.copy", lambda *a, **k: None)
+    monkeypatch.setattr("botmap.cli.save_state", lambda *a, **k: None)
+    monkeypatch.setattr("botmap.cli.record_batch_reader",
                         lambda *a, **k: _DummyReader())
 
     runner = CliRunner()

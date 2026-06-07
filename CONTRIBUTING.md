@@ -4,7 +4,7 @@
 
 ### Overview
 
-The package is published to [PyPI](https://pypi.org/project/overturemaps/) via the
+The package is published to [PyPI](https://pypi.org/project/botmap/) via the
 [`publish-pypi.yml`](.github/workflows/publish-pypi.yml) GitHub Actions workflow using
 [OIDC trusted publishing](https://docs.pypi.org/trusted-publishers/), no API token should be used. This repo, workflow, and GitHub environment have been pre-configured in PyPI and Test PyPI for publishing.
 
@@ -21,7 +21,7 @@ The package is published to [PyPI](https://pypi.org/project/overturemaps/) via t
 ### Dry-run / Test PyPI
 
 Trigger the workflow manually via to publish to
-[Test PyPI](https://test.pypi.org/project/overturemaps/) instead of production PyPI. This is useful
+[Test PyPI](https://test.pypi.org/project/botmap/) instead of production PyPI. This is useful
 for verifying the build and publish pipeline end-to-end without affecting the real package index.
 The workflow uses `skip-existing: true` for test publishes so version conflicts don't fail the run.
 
@@ -49,5 +49,5 @@ uv run pytest tests/ -v
 A CLI smoke test is also included in CI:
 
 ```bash
-uv run overturemaps download --bbox=-71.068,42.353,-71.058,42.363 -f geojson --type=building -o boston.geojson
+uv run botmap download --bbox=-71.068,42.353,-71.058,42.363 -f geojson --type=building -o boston.geojson
 ```

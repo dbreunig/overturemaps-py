@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from overturemaps.skill_installer import (
+from botmap.skill_installer import (
     install_claude_user,
     install_claude_project,
     install_agents_md,
@@ -18,16 +18,16 @@ def test_install_claude_user_writes_skill_md(monkeypatch, tmp_path):
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
 
     target = install_claude_user()
-    assert target == tmp_path / ".claude" / "skills" / "overturemaps" / "SKILL.md"
+    assert target == tmp_path / ".claude" / "skills" / "botmap" / "SKILL.md"
     assert target.exists()
     text = target.read_text()
-    assert "name: overturemaps" in text
+    assert "name: botmap" in text
 
 
 def test_install_claude_project_uses_cwd(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     target = install_claude_project()
-    assert target == tmp_path / ".claude" / "skills" / "overturemaps" / "SKILL.md"
+    assert target == tmp_path / ".claude" / "skills" / "botmap" / "SKILL.md"
     assert target.exists()
 
 

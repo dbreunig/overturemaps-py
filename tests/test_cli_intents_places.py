@@ -3,8 +3,8 @@
 import pytest
 from click.testing import CliRunner
 
-from overturemaps.cli import cli
-from overturemaps.geocoding import Division
+from botmap.cli import cli
+from botmap.geocoding import Division
 
 
 class _DummyWriter:
@@ -37,10 +37,10 @@ class _FakeReaderWithCategories:
 
 
 def _setup(monkeypatch):
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
     monkeypatch.setattr(
-        "overturemaps.cli.resolve",
+        "botmap.cli.resolve",
         lambda q: [Division(
             id="boston", name="Boston", subtype="locality",
             country="US", region="US-MA",
@@ -48,10 +48,10 @@ def _setup(monkeypatch):
             bbox=(-71.19, 42.23, -70.99, 42.40),
         )],
     )
-    monkeypatch.setattr("overturemaps.cli.get_writer",
+    monkeypatch.setattr("botmap.cli.get_writer",
                         lambda *a, **k: _DummyWriter())
-    monkeypatch.setattr("overturemaps.cli.copy", lambda *a, **k: None)
-    monkeypatch.setattr("overturemaps.cli.save_state", lambda *a, **k: None)
+    monkeypatch.setattr("botmap.cli.copy", lambda *a, **k: None)
+    monkeypatch.setattr("botmap.cli.save_state", lambda *a, **k: None)
 
 
 def test_places_with_category(monkeypatch):
@@ -64,7 +64,7 @@ def test_places_with_category(monkeypatch):
         captured["where_filters"] = where_filters
         return _DummyReader()
 
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader", fake_reader)
+    monkeypatch.setattr("botmap.cli.record_batch_reader", fake_reader)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -92,7 +92,7 @@ def test_places_with_bbox(monkeypatch):
         captured["where_filters"] = where_filters
         return _DummyReader()
 
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader", fake_reader)
+    monkeypatch.setattr("botmap.cli.record_batch_reader", fake_reader)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -146,9 +146,9 @@ def test_places_zero_results_emits_category_suggestion(monkeypatch):
     def fake_reader(*a, **k):
         return readers.pop(0)
 
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader", fake_reader)
+    monkeypatch.setattr("botmap.cli.record_batch_reader", fake_reader)
     # copy() returns rows_written; force 0 to trigger the hint.
-    monkeypatch.setattr("overturemaps.cli.copy", lambda r, w: 0)
+    monkeypatch.setattr("botmap.cli.copy", lambda r, w: 0)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -167,9 +167,9 @@ def test_places_zero_results_emits_category_suggestion(monkeypatch):
 def test_places_zero_results_no_category_filter_no_hint(monkeypatch):
     """Without a categories.primary filter, no suggestion scan runs."""
     _setup(monkeypatch)
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader",
+    monkeypatch.setattr("botmap.cli.record_batch_reader",
                         lambda *a, **k: _DummyReader())
-    monkeypatch.setattr("overturemaps.cli.copy", lambda r, w: 0)
+    monkeypatch.setattr("botmap.cli.copy", lambda r, w: 0)
     # If the suggester runs, it'd call record_batch_reader a second time.
     # We didn't queue a second reader, so a second call would return the
     # same _DummyReader, but we'll assert no suggestion text either way.

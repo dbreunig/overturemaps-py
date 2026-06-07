@@ -3,7 +3,7 @@
 import pytest
 from click.testing import CliRunner
 
-from overturemaps.cli import cli
+from botmap.cli import cli
 
 
 class _NRowReader:
@@ -38,13 +38,13 @@ class _NRowReader:
 
 
 def test_sample_respects_n_limit(monkeypatch, tmp_path):
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
 
     def fake_reader(type_, *a, **k):
         return _NRowReader(50)
 
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader", fake_reader)
+    monkeypatch.setattr("botmap.cli.record_batch_reader", fake_reader)
 
     runner = CliRunner()
     with runner.isolated_filesystem():

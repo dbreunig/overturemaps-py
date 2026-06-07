@@ -3,7 +3,7 @@
 import pyarrow as pa
 import pytest
 
-from overturemaps.introspection import (
+from botmap.introspection import (
     list_themes,
     list_types,
     flatten_schema,

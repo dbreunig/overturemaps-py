@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""PATH shim: logs every `overturemaps` invocation, then runs the real CLI.
+"""PATH shim: logs every `botmap` invocation, then runs the real CLI.
 
-Placed first on PATH as `overturemaps`. Runs the real CLI via
-`<python> -m overturemaps` (module form, so it never re-invokes this shim),
+Placed first on PATH as `botmap`. Runs the real CLI via
+`<python> -m botmap` (module form, so it never re-invokes this shim),
 captures argv / exit code / stdout / stderr to the JSON-lines file named by
 $OVERTURE_EVAL_LOG, then reproduces stdout/stderr and the exit code
 unchanged. Fails open: if logging breaks, the real CLI still runs and the
 agent sees normal output.
 
 Env:
-  OVERTURE_EVAL_PYTHON  python interpreter that has `overturemaps` installed
+  OVERTURE_EVAL_PYTHON  python interpreter that has `botmap` installed
                         (defaults to this script's interpreter)
   OVERTURE_EVAL_LOG     append-target for the JSON-lines call log (optional)
 """
@@ -29,7 +29,7 @@ def main() -> int:
 
     start = time.monotonic()
     proc = subprocess.run(
-        [python, "-m", "overturemaps", *argv],
+        [python, "-m", "botmap", *argv],
         capture_output=True,
         text=True,
     )

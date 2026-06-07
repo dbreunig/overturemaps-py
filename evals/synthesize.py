@@ -74,7 +74,7 @@ def aggregate(records: list[dict]) -> dict:
     }
 
 
-_PROPOSAL_PROMPT = """You are improving a geospatial CLI (`overturemaps`) so an AI agent never needs the low-level `download` command and never errors.
+_PROPOSAL_PROMPT = """You are improving a geospatial CLI (`botmap`) so an AI agent never needs the low-level `download` command and never errors.
 
 Below is aggregated evidence from an agent-usability eval. Produce concrete, specific improvement proposals. For each, name the target artifact and the exact change.
 
@@ -142,7 +142,7 @@ def render_report(summary: dict, proposals: list[dict]) -> str:
     for c in summary["ranked_error_clusters"]:
         lines.append(f"- **{c['taxonomy']}** in `{c['question_id']}` ×{c['count']}")
         for ex in c["examples"]:
-            lines.append(f"  - `overturemaps {' '.join(ex)}`")
+            lines.append(f"  - `botmap {' '.join(ex)}`")
     lines.append("")
     lines.append("## Coverage gaps (legitimate downloads)")
     lines.append("")
@@ -158,7 +158,7 @@ def render_report(summary: dict, proposals: list[dict]) -> str:
     for qid, exs in sorted(summary["unnecessary_download"].items()):
         lines.append(f"- `{qid}`:")
         for ex in exs:
-            lines.append(f"  - `overturemaps {' '.join(ex)}`")
+            lines.append(f"  - `botmap {' '.join(ex)}`")
     lines.append("")
     lines.append("## Proposed improvements")
     lines.append("")

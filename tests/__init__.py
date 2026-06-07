@@ -1,1 +1,1 @@
-# Tests for overturemaps package
+# Tests for botmap package

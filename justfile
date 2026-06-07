@@ -25,7 +25,7 @@ test-all:
 # Run a quick CLI smoke test against the Boston bounding box
 [group('test')]
 smoke-test:
-    uv run overturemaps download \
+    uv run botmap download \
         --bbox=-71.068,42.353,-71.058,42.363 \
         -f geojson \
         --type=building \
@@ -36,7 +36,7 @@ smoke-test:
 [group('test')]
 [arg('type', pattern='building|place|segment|connector|locality|locality_area|administrative_boundary|land|land_cover|land_use|water')]
 smoke-test-type type='building':
-    uv run overturemaps download \
+    uv run botmap download \
         --bbox=-71.068,42.353,-71.058,42.363 \
         -f geojson \
         --type={{ type }} \
@@ -51,7 +51,7 @@ latest:
 # List all available releases
 [group('release')]
 releases:
-    uv run overturemaps releases list
+    uv run botmap releases list
 
 # Build standalone binary for the current platform
 [group('build')]
@@ -59,11 +59,11 @@ build-binary:
     uv sync --group binary
     uv run pyinstaller \
         --onefile \
-        --name overturemaps \
+        --name botmap \
         --collect-all pyarrow \
         --collect-all shapely \
         --collect-data pyfiglet \
-        overturemaps/__main__.py
+        botmap/__main__.py
 
 # Build the package
 [group('build')]

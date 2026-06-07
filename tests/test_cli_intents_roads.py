@@ -3,8 +3,8 @@
 import pytest
 from click.testing import CliRunner
 
-from overturemaps.cli import cli
-from overturemaps.geocoding import Division
+from botmap.cli import cli
+from botmap.geocoding import Division
 
 
 class _DummyWriter:
@@ -17,10 +17,10 @@ class _DummyReader:
 
 
 def test_roads_class_shortcut(monkeypatch):
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
     monkeypatch.setattr(
-        "overturemaps.cli.resolve",
+        "botmap.cli.resolve",
         lambda q: [Division(
             id="tx", name="Texas", subtype="region",
             country="US", region="US-TX",
@@ -28,8 +28,8 @@ def test_roads_class_shortcut(monkeypatch):
             bbox=(-106.6, 25.8, -93.5, 36.5),
         )],
     )
-    monkeypatch.setattr("overturemaps.cli.get_writer", lambda *a, **k: _DummyWriter())
-    monkeypatch.setattr("overturemaps.cli.copy", lambda *a, **k: None)
+    monkeypatch.setattr("botmap.cli.get_writer", lambda *a, **k: _DummyWriter())
+    monkeypatch.setattr("botmap.cli.copy", lambda *a, **k: None)
 
     captured = {}
 
@@ -38,7 +38,7 @@ def test_roads_class_shortcut(monkeypatch):
         captured["where_filters"] = where_filters
         return _DummyReader()
 
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader", fake_reader)
+    monkeypatch.setattr("botmap.cli.record_batch_reader", fake_reader)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -54,10 +54,10 @@ def test_roads_class_shortcut(monkeypatch):
 
 
 def test_roads_with_bbox(monkeypatch):
-    monkeypatch.setattr("overturemaps.cli.get_latest_release",
+    monkeypatch.setattr("botmap.cli.get_latest_release",
                         lambda: "2025-12-17.0")
-    monkeypatch.setattr("overturemaps.cli.get_writer", lambda *a, **k: _DummyWriter())
-    monkeypatch.setattr("overturemaps.cli.copy", lambda *a, **k: None)
+    monkeypatch.setattr("botmap.cli.get_writer", lambda *a, **k: _DummyWriter())
+    monkeypatch.setattr("botmap.cli.copy", lambda *a, **k: None)
 
     captured = {}
 
@@ -67,7 +67,7 @@ def test_roads_with_bbox(monkeypatch):
         captured["where_filters"] = where_filters
         return _DummyReader()
 
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader", fake_reader)
+    monkeypatch.setattr("botmap.cli.record_batch_reader", fake_reader)
 
     runner = CliRunner()
     with runner.isolated_filesystem():

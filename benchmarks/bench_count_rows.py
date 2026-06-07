@@ -12,7 +12,7 @@ Run:
 
 import pytest
 
-from overturemaps.core import count_rows
+from botmap.core import count_rows
 
 BBOX_SMALL = (-71.068, 42.353, -71.058, 42.363)  # ~10 blocks
 BBOX_BOSTON = (-71.191, 42.227, -70.985, 42.400)  # full city

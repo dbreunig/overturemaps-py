@@ -2,8 +2,8 @@
 
 import pytest
 
-from overturemaps.cache import build_index, index_path
-from overturemaps.core import get_latest_release
+from botmap.cache import build_index, index_path
+from botmap.core import get_latest_release
 
 pytestmark = pytest.mark.integration
 

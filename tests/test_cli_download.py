@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from overturemaps.cli import (
+from botmap.cli import (
     BboxParamType,
     _bbox_area_sq_deg,
     cli,
@@ -26,12 +26,12 @@ class _DummyReader:
 
 def test_download_hints_verb_for_covered_type(monkeypatch):
     """`download -t place` should nudge toward the friendlier `places` verb."""
-    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2024-11-13.0")
+    monkeypatch.setattr("botmap.cli.get_latest_release", lambda: "2024-11-13.0")
     monkeypatch.setattr(
-        "overturemaps.cli.record_batch_reader", lambda *a, **k: _DummyReader()
+        "botmap.cli.record_batch_reader", lambda *a, **k: _DummyReader()
     )
-    monkeypatch.setattr("overturemaps.cli.get_writer", lambda *a, **k: _DummyWriter())
-    monkeypatch.setattr("overturemaps.cli.copy", lambda *a, **k: None)
+    monkeypatch.setattr("botmap.cli.get_writer", lambda *a, **k: _DummyWriter())
+    monkeypatch.setattr("botmap.cli.copy", lambda *a, **k: None)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -46,12 +46,12 @@ def test_download_hints_verb_for_covered_type(monkeypatch):
 
 def test_download_infrastructure_hint_points_to_places(monkeypatch):
     """infrastructure downloads get a hint that transit stops are place features."""
-    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2024-11-13.0")
+    monkeypatch.setattr("botmap.cli.get_latest_release", lambda: "2024-11-13.0")
     monkeypatch.setattr(
-        "overturemaps.cli.record_batch_reader", lambda *a, **k: _DummyReader()
+        "botmap.cli.record_batch_reader", lambda *a, **k: _DummyReader()
     )
-    monkeypatch.setattr("overturemaps.cli.get_writer", lambda *a, **k: _DummyWriter())
-    monkeypatch.setattr("overturemaps.cli.copy", lambda *a, **k: None)
+    monkeypatch.setattr("botmap.cli.get_writer", lambda *a, **k: _DummyWriter())
+    monkeypatch.setattr("botmap.cli.copy", lambda *a, **k: None)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -66,12 +66,12 @@ def test_download_infrastructure_hint_points_to_places(monkeypatch):
 
 def test_download_hint_is_actionable_command(monkeypatch):
     """Hint for a covered type shows a concrete runnable command, not just --help."""
-    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2024-11-13.0")
+    monkeypatch.setattr("botmap.cli.get_latest_release", lambda: "2024-11-13.0")
     monkeypatch.setattr(
-        "overturemaps.cli.record_batch_reader", lambda *a, **k: _DummyReader()
+        "botmap.cli.record_batch_reader", lambda *a, **k: _DummyReader()
     )
-    monkeypatch.setattr("overturemaps.cli.get_writer", lambda *a, **k: _DummyWriter())
-    monkeypatch.setattr("overturemaps.cli.copy", lambda *a, **k: None)
+    monkeypatch.setattr("botmap.cli.get_writer", lambda *a, **k: _DummyWriter())
+    monkeypatch.setattr("botmap.cli.copy", lambda *a, **k: None)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -81,7 +81,7 @@ def test_download_hint_is_actionable_command(monkeypatch):
             "--where", "class=cycleway",
         ])
         assert result.exit_code == 0, result.output
-        assert "overturemaps roads" in result.output
+        assert "botmap roads" in result.output
         assert "--in" in result.output
         assert "--class cycleway" in result.output
         assert "--help" not in result.output
@@ -105,21 +105,21 @@ def test_download_saves_absolute_output_path(monkeypatch):
 
     captured = {}
 
-    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2024-11-13.0")
+    monkeypatch.setattr("botmap.cli.get_latest_release", lambda: "2024-11-13.0")
 
     monkeypatch.setattr(
-        "overturemaps.cli.record_batch_reader", lambda *args, **kwargs: _DummyReader()
+        "botmap.cli.record_batch_reader", lambda *args, **kwargs: _DummyReader()
     )
     monkeypatch.setattr(
-        "overturemaps.cli.get_writer", lambda *args, **kwargs: _DummyWriter()
+        "botmap.cli.get_writer", lambda *args, **kwargs: _DummyWriter()
     )
-    monkeypatch.setattr("overturemaps.cli.copy", lambda *args, **kwargs: None)
+    monkeypatch.setattr("botmap.cli.copy", lambda *args, **kwargs: None)
 
     def _fake_save_state(state, state_path):
         captured["state"] = state
         captured["state_path"] = state_path
 
-    monkeypatch.setattr("overturemaps.cli.save_state", _fake_save_state)
+    monkeypatch.setattr("botmap.cli.save_state", _fake_save_state)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -218,15 +218,15 @@ def test_bbox_area_sq_deg():
 
 def test_download_warns_on_large_bbox(monkeypatch):
     """download should warn when bbox is very large."""
-    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2024-11-13.0")
+    monkeypatch.setattr("botmap.cli.get_latest_release", lambda: "2024-11-13.0")
 
     monkeypatch.setattr(
-        "overturemaps.cli.record_batch_reader", lambda *args, **kwargs: _DummyReader()
+        "botmap.cli.record_batch_reader", lambda *args, **kwargs: _DummyReader()
     )
     monkeypatch.setattr(
-        "overturemaps.cli.get_writer", lambda *args, **kwargs: _DummyWriter()
+        "botmap.cli.get_writer", lambda *args, **kwargs: _DummyWriter()
     )
-    monkeypatch.setattr("overturemaps.cli.copy", lambda *args, **kwargs: None)
+    monkeypatch.setattr("botmap.cli.copy", lambda *args, **kwargs: None)
 
     runner = CliRunner()
     result = runner.invoke(
@@ -249,15 +249,15 @@ def test_download_warns_on_large_bbox(monkeypatch):
 
 def test_download_warns_on_no_bbox(monkeypatch):
     """download should warn when no bbox is provided."""
-    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2024-11-13.0")
+    monkeypatch.setattr("botmap.cli.get_latest_release", lambda: "2024-11-13.0")
 
     monkeypatch.setattr(
-        "overturemaps.cli.record_batch_reader", lambda *args, **kwargs: _DummyReader()
+        "botmap.cli.record_batch_reader", lambda *args, **kwargs: _DummyReader()
     )
     monkeypatch.setattr(
-        "overturemaps.cli.get_writer", lambda *args, **kwargs: _DummyWriter()
+        "botmap.cli.get_writer", lambda *args, **kwargs: _DummyWriter()
     )
-    monkeypatch.setattr("overturemaps.cli.copy", lambda *args, **kwargs: None)
+    monkeypatch.setattr("botmap.cli.copy", lambda *args, **kwargs: None)
 
     runner = CliRunner()
     result = runner.invoke(
@@ -278,15 +278,15 @@ def test_download_warns_on_no_bbox(monkeypatch):
 
 def test_download_no_warning_on_small_bbox(monkeypatch):
     """download should not warn when bbox is small."""
-    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2024-11-13.0")
+    monkeypatch.setattr("botmap.cli.get_latest_release", lambda: "2024-11-13.0")
 
     monkeypatch.setattr(
-        "overturemaps.cli.record_batch_reader", lambda *args, **kwargs: _DummyReader()
+        "botmap.cli.record_batch_reader", lambda *args, **kwargs: _DummyReader()
     )
     monkeypatch.setattr(
-        "overturemaps.cli.get_writer", lambda *args, **kwargs: _DummyWriter()
+        "botmap.cli.get_writer", lambda *args, **kwargs: _DummyWriter()
     )
-    monkeypatch.setattr("overturemaps.cli.copy", lambda *args, **kwargs: None)
+    monkeypatch.setattr("botmap.cli.copy", lambda *args, **kwargs: None)
 
     runner = CliRunner()
     result = runner.invoke(
@@ -308,7 +308,7 @@ def test_download_no_warning_on_small_bbox(monkeypatch):
 def test_download_invalid_release_explains_retention_policy(monkeypatch):
     """download --release with an old release should explain the retention policy."""
     monkeypatch.setattr(
-        "overturemaps.cli.get_available_releases",
+        "botmap.cli.get_available_releases",
         lambda: (["2026-03-18.0", "2026-02-18.0"], "2026-03-18.0"),
     )
 
@@ -335,7 +335,7 @@ def test_download_invalid_release_explains_retention_policy(monkeypatch):
 
 def test_download_with_in_flag_resolves_to_bbox(monkeypatch):
     """`--in` resolves a place to a bbox and feeds it through the pipeline."""
-    from overturemaps.geocoding import Division
+    from botmap.geocoding import Division
 
     captured = {}
 
@@ -348,18 +348,18 @@ def test_download_with_in_flag_resolves_to_bbox(monkeypatch):
             bbox=(-71.19, 42.23, -70.99, 42.40),
         )]
 
-    monkeypatch.setattr("overturemaps.cli.resolve", fake_resolve)
-    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2025-12-17.0")
+    monkeypatch.setattr("botmap.cli.resolve", fake_resolve)
+    monkeypatch.setattr("botmap.cli.get_latest_release", lambda: "2025-12-17.0")
 
     def fake_reader(type_, bbox, *args, **kwargs):
         captured["bbox"] = bbox
         captured["type"] = type_
         return _DummyReader()
 
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader", fake_reader)
-    monkeypatch.setattr("overturemaps.cli.get_writer", lambda *a, **k: _DummyWriter())
-    monkeypatch.setattr("overturemaps.cli.copy", lambda *a, **k: None)
-    monkeypatch.setattr("overturemaps.cli.save_state", lambda *a, **k: None)
+    monkeypatch.setattr("botmap.cli.record_batch_reader", fake_reader)
+    monkeypatch.setattr("botmap.cli.get_writer", lambda *a, **k: _DummyWriter())
+    monkeypatch.setattr("botmap.cli.copy", lambda *a, **k: None)
+    monkeypatch.setattr("botmap.cli.save_state", lambda *a, **k: None)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -389,17 +389,17 @@ def test_download_with_where_passes_filter_to_reader(monkeypatch):
     """`--where` is parsed and passed alongside the bbox filter."""
     captured = {}
 
-    monkeypatch.setattr("overturemaps.cli.get_latest_release", lambda: "2025-12-17.0")
+    monkeypatch.setattr("botmap.cli.get_latest_release", lambda: "2025-12-17.0")
 
     def fake_reader(type_, bbox, release, ct, rt, stac, where_filters=None):
         captured["where_filters"] = where_filters
         return _DummyReader()
 
     # We're going to overwrite record_batch_reader to accept the new kwarg.
-    monkeypatch.setattr("overturemaps.cli.record_batch_reader", fake_reader)
-    monkeypatch.setattr("overturemaps.cli.get_writer", lambda *a, **k: _DummyWriter())
-    monkeypatch.setattr("overturemaps.cli.copy", lambda *a, **k: None)
-    monkeypatch.setattr("overturemaps.cli.save_state", lambda *a, **k: None)
+    monkeypatch.setattr("botmap.cli.record_batch_reader", fake_reader)
+    monkeypatch.setattr("botmap.cli.get_writer", lambda *a, **k: _DummyWriter())
+    monkeypatch.setattr("botmap.cli.copy", lambda *a, **k: None)
+    monkeypatch.setattr("botmap.cli.save_state", lambda *a, **k: None)
 
     runner = CliRunner()
     with runner.isolated_filesystem():

@@ -23,7 +23,7 @@ import shapely
 import shapely.wkb
 from shapely.geometry import Point, Polygon
 
-from overturemaps.cli import GeoJSONSeqWriter
+from botmap.writers import GeoJSONSeqWriter
 
 
 # ---------------------------------------------------------------------------
