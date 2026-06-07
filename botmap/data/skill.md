@@ -45,6 +45,40 @@ Negative examples (do NOT reach for botmap):
 If you forget the surface, run `botmap --json capabilities`. It returns
 a manifest of every subcommand with its parameters.
 
+## Troubleshooting flow (work the problem in this order)
+
+Most place-based questions resolve with this sequence — don't jump straight
+to `download`:
+
+1. **Resolve the place.** `botmap --json where "Place, ST"`. Check the
+   `name`, `country`, and `region` in the output match what you meant — a
+   bare 2-letter qualifier can be ambiguous (e.g. "Santa Barbara, CA"). If it
+   resolved to the wrong country/region, re-run with an explicit qualifier
+   like `"Santa Barbara, US-CA"`. The `--json` output also carries a
+   `candidates` array; `where … --all` lists every match.
+2. **Place not in the divisions index?** `where` falls back to a parent and
+   prints a yellow `[botmap]` warning on **stderr** naming what it used.
+   Read that warning. If the fallback is wrong or too coarse (e.g. a
+   neighborhood resolving to a whole country), skip `--in` and pass an
+   approximate `--bbox xmin,ymin,xmax,ymax` instead.
+3. **Count before pulling.** `botmap --json count -t TYPE --in "…"`.
+4. **Too many results?** Add `--where` / `--category` / `--class` filters, or
+   narrow the area with a tighter `--bbox`. Too few (or zero)? Widen the
+   `--bbox`, drop a filter, or check `categories`/`schema` for the right value.
+5. **Preview, then pull.** `sample -n 5` (or any verb with `-n`) to confirm
+   shape, then run the verb to get the full set.
+
+## Limiting and proximity
+
+- **`-n` / `--limit` works on every data verb** — `sample`, `at`, and all the
+  convenience verbs (`places`, `buildings`, `roads`, `water`, `landuse`,
+  `addresses`). `botmap places --in "…" -n 20` emits at most 20 features.
+  Without `-n`, verbs stream **all** matches (pipe or `-o` them).
+- **"Near a point" → use `at`, not a verb.** `botmap at LAT,LON -t place -n 10`
+  returns the N features actually *closest* to the point, sorted by distance.
+  The `--in` / `--bbox` verbs filter by bounding box, so "near" there means
+  "inside the box" — results are **not** distance-ordered.
+
 ## Recipes
 
 ### 1. Resolve a place name to a bbox

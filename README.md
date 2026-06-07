@@ -129,6 +129,9 @@ botmap count -t building --in "Manhattan" --where 'height>=100'
 
 # Peek at five matching features before committing to the full pull
 botmap sample -t building --in "Manhattan" --where 'height>=100' -n 5
+
+# Every data verb also takes -n/--limit to cap the output (default: all matches)
+botmap places --in "Brooklyn" --category coffee_shop -n 20
 ```
 
 ### Buildings with attributes

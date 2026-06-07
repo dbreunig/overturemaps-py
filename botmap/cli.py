@@ -1089,6 +1089,8 @@ def cache_build_cmd():
 @click.option("--category", required=False, type=str,
               help="Shortcut for --where categories.primary=VAL")
 @click.option("--where", "where_exprs", multiple=True)
+@click.option("-n", "--limit", "limit", default=None, type=int,
+              help="Maximum number of features to emit (default: all matches).")
 @click.option("-f", "output_format",
               type=click.Choice(["geojson", "geojsonseq", "geoparquet"]),
               default="geojsonseq", show_default=True)
@@ -1096,7 +1098,7 @@ def cache_build_cmd():
 @click.option("-r", "--release", default=None, callback=validate_release,
               required=False)
 @click.option("--json", "json_no_op", is_flag=True, default=False, hidden=True)
-def places(in_place, bbox, category, where_exprs, output_format, output, release, json_no_op):
+def places(in_place, bbox, category, where_exprs, limit, output_format, output, release, json_no_op):
     """Download POIs in a named place. Filter by --category for common asks."""
     if bbox is not None and in_place is not None:
         raise click.UsageError("--bbox and --in are mutually exclusive")
@@ -1128,6 +1130,8 @@ def places(in_place, bbox, category, where_exprs, output_format, output, release
     )
     if reader is None:
         return
+    if limit is not None:
+        reader = _limit_reader(reader, limit)
 
     with get_writer(output_format, output_file, schema=reader.schema) as writer:
         rows_written = copy(reader, writer)
@@ -1170,6 +1174,8 @@ def places(in_place, bbox, category, where_exprs, output_format, output, release
 @click.option("--bbox", required=False, type=BboxParamType(),
               help="Bounding box xmin,ymin,xmax,ymax. Mutually exclusive with --in.")
 @click.option("--where", "where_exprs", multiple=True)
+@click.option("-n", "--limit", "limit", default=None, type=int,
+              help="Maximum number of features to emit (default: all matches).")
 @click.option("-f", "output_format",
               type=click.Choice(["geojson", "geojsonseq", "geoparquet"]),
               default="geojsonseq", show_default=True)
@@ -1177,7 +1183,7 @@ def places(in_place, bbox, category, where_exprs, output_format, output, release
 @click.option("-r", "--release", default=None, callback=validate_release,
               required=False)
 @click.option("--json", "json_no_op", is_flag=True, default=False, hidden=True)
-def buildings(in_place, bbox, where_exprs, output_format, output, release, json_no_op):
+def buildings(in_place, bbox, where_exprs, limit, output_format, output, release, json_no_op):
     """Download buildings in a named place."""
     if bbox is not None and in_place is not None:
         raise click.UsageError("--bbox and --in are mutually exclusive")
@@ -1203,6 +1209,8 @@ def buildings(in_place, bbox, where_exprs, output_format, output, release, json_
     )
     if reader is None:
         return
+    if limit is not None:
+        reader = _limit_reader(reader, limit)
     with get_writer(output_format, output_file, schema=reader.schema) as writer:
         copy(reader, writer)
 
@@ -1215,6 +1223,8 @@ def buildings(in_place, bbox, where_exprs, output_format, output, release, json_
 @click.option("--class", "road_class", required=False, type=str,
               help="Shortcut for --where class=VAL (e.g. motorway, primary)")
 @click.option("--where", "where_exprs", multiple=True)
+@click.option("-n", "--limit", "limit", default=None, type=int,
+              help="Maximum number of features to emit (default: all matches).")
 @click.option("-f", "output_format",
               type=click.Choice(["geojson", "geojsonseq", "geoparquet"]),
               default="geojsonseq", show_default=True)
@@ -1222,7 +1232,7 @@ def buildings(in_place, bbox, where_exprs, output_format, output, release, json_
 @click.option("-r", "--release", default=None, callback=validate_release,
               required=False)
 @click.option("--json", "json_no_op", is_flag=True, default=False, hidden=True)
-def roads(in_place, bbox, road_class, where_exprs, output_format, output, release, json_no_op):
+def roads(in_place, bbox, road_class, where_exprs, limit, output_format, output, release, json_no_op):
     """Download road segments in a named place."""
     if bbox is not None and in_place is not None:
         raise click.UsageError("--bbox and --in are mutually exclusive")
@@ -1251,6 +1261,8 @@ def roads(in_place, bbox, road_class, where_exprs, output_format, output, releas
     )
     if reader is None:
         return
+    if limit is not None:
+        reader = _limit_reader(reader, limit)
     with get_writer(output_format, output_file, schema=reader.schema) as writer:
         copy(reader, writer)
 
@@ -1263,6 +1275,8 @@ def roads(in_place, bbox, road_class, where_exprs, output_format, output, releas
 @click.option("--class", "water_class", required=False, type=str,
               help="Shortcut for --where class=VAL (e.g. ocean, lake, river, stream)")
 @click.option("--where", "where_exprs", multiple=True)
+@click.option("-n", "--limit", "limit", default=None, type=int,
+              help="Maximum number of features to emit (default: all matches).")
 @click.option("-f", "output_format",
               type=click.Choice(["geojson", "geojsonseq", "geoparquet"]),
               default="geojsonseq", show_default=True)
@@ -1270,7 +1284,7 @@ def roads(in_place, bbox, road_class, where_exprs, output_format, output, releas
 @click.option("-r", "--release", default=None, callback=validate_release,
               required=False)
 @click.option("--json", "json_no_op", is_flag=True, default=False, hidden=True)
-def water(in_place, bbox, water_class, where_exprs, output_format, output, release, json_no_op):
+def water(in_place, bbox, water_class, where_exprs, limit, output_format, output, release, json_no_op):
     """Download water features (oceans, lakes, rivers, ...) in a named place."""
     if bbox is not None and in_place is not None:
         raise click.UsageError("--bbox and --in are mutually exclusive")
@@ -1299,6 +1313,8 @@ def water(in_place, bbox, water_class, where_exprs, output_format, output, relea
     )
     if reader is None:
         return
+    if limit is not None:
+        reader = _limit_reader(reader, limit)
     with get_writer(output_format, output_file, schema=reader.schema) as writer:
         copy(reader, writer)
 
@@ -1312,6 +1328,8 @@ def water(in_place, bbox, water_class, where_exprs, output_format, output, relea
               help="Shortcut for --where class=VAL "
                    "(e.g. commercial, residential, recreation, agriculture)")
 @click.option("--where", "where_exprs", multiple=True)
+@click.option("-n", "--limit", "limit", default=None, type=int,
+              help="Maximum number of features to emit (default: all matches).")
 @click.option("-f", "output_format",
               type=click.Choice(["geojson", "geojsonseq", "geoparquet"]),
               default="geojsonseq", show_default=True)
@@ -1319,7 +1337,7 @@ def water(in_place, bbox, water_class, where_exprs, output_format, output, relea
 @click.option("-r", "--release", default=None, callback=validate_release,
               required=False)
 @click.option("--json", "json_no_op", is_flag=True, default=False, hidden=True)
-def landuse(in_place, bbox, landuse_class, where_exprs, output_format, output, release, json_no_op):
+def landuse(in_place, bbox, landuse_class, where_exprs, limit, output_format, output, release, json_no_op):
     """Download land-use polygons (residential, commercial, ...) in a named place."""
     if bbox is not None and in_place is not None:
         raise click.UsageError("--bbox and --in are mutually exclusive")
@@ -1348,6 +1366,8 @@ def landuse(in_place, bbox, landuse_class, where_exprs, output_format, output, r
     )
     if reader is None:
         return
+    if limit is not None:
+        reader = _limit_reader(reader, limit)
     with get_writer(output_format, output_file, schema=reader.schema) as writer:
         copy(reader, writer)
 
@@ -1364,6 +1384,8 @@ def landuse(in_place, bbox, landuse_class, where_exprs, output_format, output, r
 @click.option("--postcode", required=False, type=str,
               help="Postal code (exact match).")
 @click.option("--where", "where_exprs", multiple=True)
+@click.option("-n", "--limit", "limit", default=None, type=int,
+              help="Maximum number of features to emit (default: all matches).")
 @click.option("-f", "output_format",
               type=click.Choice(["geojson", "geojsonseq", "geoparquet"]),
               default="geojsonseq", show_default=True)
@@ -1371,7 +1393,7 @@ def landuse(in_place, bbox, landuse_class, where_exprs, output_format, output, r
 @click.option("-r", "--release", default=None, callback=validate_release,
               required=False)
 @click.option("--json", "json_no_op", is_flag=True, default=False, hidden=True)
-def addresses(in_place, bbox, street, number, postcode, where_exprs,
+def addresses(in_place, bbox, street, number, postcode, where_exprs, limit,
               output_format, output, release, json_no_op):
     """Find addresses in a named place or bbox.
 
@@ -1413,6 +1435,8 @@ def addresses(in_place, bbox, street, number, postcode, where_exprs,
     )
     if reader is None:
         return
+    if limit is not None:
+        reader = _limit_reader(reader, limit)
     with get_writer(output_format, output_file, schema=reader.schema) as writer:
         copy(reader, writer)
 
