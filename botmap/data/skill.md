@@ -45,6 +45,42 @@ Negative examples (do NOT reach for botmap):
 If you forget the surface, run `botmap --json capabilities`. It returns
 a manifest of every subcommand with its parameters.
 
+## Troubleshooting flow (work the problem in this order)
+
+Most place-based questions resolve with this sequence — don't jump straight
+to `download`:
+
+1. **Resolve the place.** `botmap --json where "Place, ST"`. Check the
+   `name`, `country`, and `region` in the output match what you meant — a
+   bare 2-letter qualifier can be ambiguous (e.g. "Santa Barbara, CA"). If it
+   resolved to the wrong country/region, re-run with an explicit qualifier
+   like `"Santa Barbara, US-CA"`. The `--json` output also carries a
+   `candidates` array; `where … --all` lists every match.
+2. **Place not in the divisions index?** `where` falls back to a parent and
+   prints a yellow `[botmap]` warning on **stderr** naming what it used.
+   Read that warning. If the fallback is wrong or too coarse (e.g. a
+   neighborhood resolving to a whole country), skip `--in` and pass an
+   approximate `--bbox xmin,ymin,xmax,ymax` instead.
+3. **Count before pulling.** `botmap --json count -t TYPE --in "…"`.
+4. **Too many results?** Add `--where` / `--category` / `--class` filters, or
+   narrow the area with a tighter `--bbox`. Too few (or zero)? Widen the
+   `--bbox`, drop a filter, or check `categories`/`schema` for the right value.
+5. **Preview, then pull.** `sample -n 5` (or any verb with `-n`) to confirm
+   shape, then run the verb to get the full set.
+
+## Limiting and proximity
+
+- **`-n` / `--limit` caps the output of `sample`, `at`, and every
+  convenience verb** (`places`, `buildings`, `roads`, `water`, `landuse`,
+  `addresses`). `botmap places --in "…" -n 20` emits at most 20 features.
+  Without `-n`, these stream **all** matches (pipe or `-o` them). (The
+  low-level `download` command has no `-n`; use a convenience verb or
+  `sample` when you want to limit.)
+- **"Near a point" → use `at`, not a verb.** `botmap at LAT,LON -t place -n 10`
+  returns the N features actually *closest* to the point, sorted by distance.
+  The `--in` / `--bbox` verbs filter by bounding box, so "near" there means
+  "inside the box" — results are **not** distance-ordered.
+
 ## Recipes
 
 ### 1. Resolve a place name to a bbox
@@ -91,9 +127,13 @@ botmap roads --in "Alameda County, CA" --class cycleway \
   -f geojsonseq -o bikepaths.jsonl
 ```
 
-### 7. What's near a point
+### 7. What's near a point (distance-sorted)
 ```bash
+# `at` returns the N features CLOSEST to the point, ordered by distance —
+# this is the tool for "near X" questions. --radius (meters) bounds the
+# search; --category / --where filter it.
 botmap at 40.7484,-73.9857 -t place -n 10
+botmap at 40.7484,-73.9857 -t place --category pharmacy --radius 250 -n 10
 ```
 
 ### 8. Which admin areas contain a point
@@ -152,6 +192,15 @@ botmap places --in "Williamsburg, NY" --category bus_stop \
 # Emits a GeoJSON Feature with the division_area polygon — the supported way
 # to get a boundary. Don't use `download -t division_area` for this.
 botmap where "Alameda County, CA" --geometry > county.geojson
+```
+
+### 17. Address lookups
+```bash
+# --street is a case-insensitive SUBSTRING match ("Fountain" matches "Fountain
+# St", "E Fountain Blvd"); --number and --postcode are exact. Requires --in or
+# --bbox. For other address fields, use --where.
+botmap addresses --in "Boston, MA" --street "Beacon" -n 20
+botmap addresses --bbox -71.07,42.35,-71.06,42.36 --postcode 02108
 ```
 
 ## Schema cheatsheet
