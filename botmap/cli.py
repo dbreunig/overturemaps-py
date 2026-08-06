@@ -1803,7 +1803,7 @@ def containing(ctx, latlon):
         click.secho(f"  {row['name']} ({row['subtype']}, {loc})", fg="cyan")
 
 
-_INSTALL_TARGETS = ("claude-user", "claude-project", "agents-md")
+_INSTALL_TARGETS = ("claude-user", "claude-project", "pi-user", "pi-project", "agents-md")
 
 
 @cli.command("install-skill")
@@ -1839,6 +1839,20 @@ def install_skill_cmd(targets, skip_confirm):
                 if not click.confirm(f"Overwrite {target_path}?", default=True):
                     continue
             p = skill_installer.install_claude_project()
+            click.secho(f"Wrote {p}", fg="green")
+        elif t == "pi-user":
+            target_path = skill_installer._pi_user_dir() / "SKILL.md"
+            if target_path.exists() and not skip_confirm:
+                if not click.confirm(f"Overwrite {target_path}?", default=True):
+                    continue
+            p = skill_installer.install_pi_user()
+            click.secho(f"Wrote {p}", fg="green")
+        elif t == "pi-project":
+            target_path = skill_installer._pi_project_dir() / "SKILL.md"
+            if target_path.exists() and not skip_confirm:
+                if not click.confirm(f"Overwrite {target_path}?", default=True):
+                    continue
+            p = skill_installer.install_pi_project()
             click.secho(f"Wrote {p}", fg="green")
         elif t == "agents-md":
             p = skill_installer.install_agents_md()
