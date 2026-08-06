@@ -25,6 +25,14 @@ def _claude_project_dir() -> Path:
     return Path.cwd() / ".claude" / "skills" / "botmap"
 
 
+def _pi_user_dir() -> Path:
+    return Path(os.environ.get("HOME", "~")).expanduser() / ".pi" / "agent" / "skills" / "botmap"
+
+
+def _pi_project_dir() -> Path:
+    return Path.cwd() / ".pi" / "skills" / "botmap"
+
+
 def install_claude_user() -> Path:
     """Write the SKILL.md to the user-scope Claude Code skills dir."""
     target = _claude_user_dir() / "SKILL.md"
@@ -36,6 +44,22 @@ def install_claude_user() -> Path:
 def install_claude_project() -> Path:
     """Write the SKILL.md to the project-scope Claude Code skills dir."""
     target = _claude_project_dir() / "SKILL.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(_skill_content())
+    return target
+
+
+def install_pi_user() -> Path:
+    """Write the SKILL.md to the user-scope Pi skills dir."""
+    target = _pi_user_dir() / "SKILL.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(_skill_content())
+    return target
+
+
+def install_pi_project() -> Path:
+    """Write the SKILL.md to the project-scope Pi skills dir."""
+    target = _pi_project_dir() / "SKILL.md"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(_skill_content())
     return target
